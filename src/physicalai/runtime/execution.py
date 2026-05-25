@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from physicalai.runtime._action_queue import ChunkedActionQueue
     from physicalai.runtime._callback_bus import _CallbackBus
     from physicalai.runtime.runtime import ActionQueue
+    from physicalai.runtime.policies import RuntimePolicy
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ class Execution(ABC):
         self._session_id = session_id
 
     @abstractmethod
-    def start(self, model: InferenceModel, action_queue: ActionQueue) -> None:
+    def start(self, model: RuntimePolicy, action_queue: ActionQueue) -> None:
         """Bind to model and queue. Called once before the loop."""
         ...
 
@@ -82,7 +83,7 @@ class SyncExecution(Execution):
                 the chunk (discards the stale tail). Set to 0.0 to drain
                 the entire chunk before re-inferring.
         """
-        self._model: InferenceModel | None = None
+        self._model: RuntimePolicy | None = None
         self._queue: ChunkedActionQueue | None = None
         self._chunk_size: int = 0
         self._threshold_frac = request_threshold
@@ -91,7 +92,7 @@ class SyncExecution(Execution):
         self._bus: _CallbackBus | None = None
         self._session_id: str = ""
 
-    def start(self, model: InferenceModel, action_queue: ActionQueue) -> None:
+    def start(self, model: RuntimePolicy, action_queue: ActionQueue) -> None:
         """Bind model and queue."""
         self._model = model
         self._queue = cast("ChunkedActionQueue", action_queue)
@@ -170,7 +171,7 @@ class AsyncExecution(Execution):
         self._threshold_frac = request_threshold
         self._watchdog_timeout_s = watchdog_timeout_s
 
-        self._model: InferenceModel | None = None
+        self._model: RuntimePolicy | None = None
         self._queue: ChunkedActionQueue | None = None
         self._chunk_size: int = 0
         self._threshold_count: int = 0
@@ -188,7 +189,7 @@ class AsyncExecution(Execution):
         self._bus: _CallbackBus | None = None
         self._session_id: str = ""
 
-    def start(self, model: InferenceModel, action_queue: ActionQueue) -> None:
+    def start(self, model: RuntimePolicy, action_queue: ActionQueue) -> None:
         """Bind model/queue and spawn inference thread."""
         self._model = model
         self._queue = cast("ChunkedActionQueue", action_queue)
