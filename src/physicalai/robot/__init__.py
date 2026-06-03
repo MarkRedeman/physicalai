@@ -20,6 +20,7 @@ from physicalai.robot.interface import Robot, RobotObservation
 from physicalai.robot.verify import verify_robot
 
 if TYPE_CHECKING:
+    from physicalai.robot.kinematics import KinematicEndEffectorRobot as KinematicEndEffectorRobot
     from physicalai.robot.so101 import SO101 as SO101
     from physicalai.robot.trossen import BimanualWidowXAI as BimanualWidowXAI
     from physicalai.robot.trossen import WidowXAI as WidowXAI
@@ -61,6 +62,11 @@ def __getattr__(name: str) -> object:
         from physicalai.robot.trossen import BimanualWidowXAI  # noqa: PLC0415
 
         return BimanualWidowXAI
+
+    if name == "KinematicEndEffectorRobot":
+        from physicalai.robot.kinematics import KinematicEndEffectorRobot  # noqa: PLC0415
+
+        return KinematicEndEffectorRobot
 
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)
