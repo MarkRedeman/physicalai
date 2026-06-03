@@ -53,6 +53,12 @@ python examples/kinematics/end_effector_pose.py ... --jog-x 0.01 --execute
 
 `--jog-x 0.01` means: read the current pose, add 1 cm to `x`, keep the orientation unchanged, solve IK, and send the resulting joint command to the wrapped robot.
 
+The example rejects jogs larger than `--max-jog` meters, defaulting to 0.05 m. The adapter also applies safety guardrails before sending IK results:
+
+- maximum Cartesian target delta: 0.05 m by default
+- maximum orientation target delta: 0.25 rad by default
+- maximum solved controlled-joint delta: 10 degrees by default
+
 Notes:
 
 - The URDF joint names must match the wrapped robot's `joint_names` for all controlled joints.

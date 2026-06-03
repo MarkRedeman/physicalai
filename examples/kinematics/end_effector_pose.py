@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from physicalai.robot import KinematicEndEffectorRobot
-from physicalai.robot.kinematics import InverseKinematicsOptions
+from physicalai.robot.kinematics import InverseKinematicsOptions, KinematicSafetyOptions
 
 if TYPE_CHECKING:
     from physicalai.robot.interface import Robot
@@ -128,6 +128,7 @@ def _build_parser() -> argparse.ArgumentParser:
     jog_group.add_argument("--jog-y", type=float, default=0.0, help="Relative y movement in meters")
     jog_group.add_argument("--jog-z", type=float, default=0.0, help="Relative z movement in meters")
     jog_group.add_argument("--execute", action="store_true", help="Actually send the jog action to the robot")
+    jog_group.add_argument("--max-jog", type=float, default=0.05, help="Maximum allowed jog norm in meters")
     jog_group.add_argument("--goal-time", type=float, default=0.5, help="Goal time for jog action in seconds")
     jog_group.add_argument(
         "--settle-time",
@@ -140,7 +141,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _read_and_optionally_jog(robot: KinematicEndEffectorRobot, args: argparse.Namespace) -> None:
-    """Read the current pose and optionally execute one Cartesian jog."""
+    """Read the current pose and optionally execute one Cartesian jog.
+
+    Raises:
+        ValueError: If requested jog exceeds the configured maximum.
+    """
     obs = robot.get_observation()
     _print_observation(obs)
 
@@ -148,6 +153,10 @@ def _read_and_optionally_jog(robot: KinematicEndEffectorRobot, args: argparse.Na
     if not np.any(jog):
         print("No jog requested. Exiting without sending an action.")  # noqa: T201
         return
+    jog_norm = float(np.linalg.norm(jog))
+    if jog_norm > args.max_jog:
+        msg = f"Requested jog norm {jog_norm:.6f} m exceeds --max-jog {args.max_jog:.6f} m."
+        raise ValueError(msg)
 
     target = obs.joint_positions.copy()
     target[:3] += jog
@@ -182,6 +191,7 @@ def main(argv: list[str] | None = None) -> None:
             tolerance=args.ik_tolerance,
             damping=args.ik_damping,
         ),
+        safety_options=KinematicSafetyOptions(max_cartesian_delta_m=args.max_jog),
     )
 
     print(f"Connecting {args.robot}...")  # noqa: T201

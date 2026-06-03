@@ -9,13 +9,13 @@ import sys
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 
 from physicalai.robot.interface import Robot
-from physicalai.robot.kinematics import InverseKinematicsOptions, KinematicEndEffectorRobot
+from physicalai.robot.kinematics import InverseKinematicsOptions, KinematicEndEffectorRobot, KinematicSafetyOptions
 
 if TYPE_CHECKING:
     from physicalai.capture.frame import Frame
@@ -138,7 +138,11 @@ def fake_pinocchio() -> SimpleNamespace:
     return _make_fake_pinocchio()
 
 
-def _create_adapter(fake_pinocchio: SimpleNamespace, internal: _FakeInternalRobot | None = None) -> KinematicEndEffectorRobot:
+def _create_adapter(
+    fake_pinocchio: SimpleNamespace,
+    internal: _FakeInternalRobot | None = None,
+    safety_options: KinematicSafetyOptions | None = None,
+) -> KinematicEndEffectorRobot:
     if internal is None:
         internal = _FakeInternalRobot()
     with patch.dict(sys.modules, {"pinocchio": fake_pinocchio}):
@@ -147,6 +151,7 @@ def _create_adapter(fake_pinocchio: SimpleNamespace, internal: _FakeInternalRobo
             urdf_path="/tmp/fake.urdf",
             end_effector_frame="ee_link",
             controlled_joint_names=["joint1"],
+            safety_options=safety_options,
         )
 
 
@@ -187,12 +192,12 @@ def test_get_observation_returns_end_effector_pose(fake_pinocchio: SimpleNamespa
 def test_send_action_solves_ik_and_preserves_gripper(fake_pinocchio: SimpleNamespace) -> None:
     internal = _FakeInternalRobot()
     adapter = _create_adapter(fake_pinocchio, internal)
-    target = np.array([np.pi / 2, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+    target = np.array([np.deg2rad(2.0), 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], dtype=np.float32)
 
     adapter.send_action(target, goal_time=0.2)
 
     assert internal.sent_action is not None
-    assert internal.sent_action[0] == pytest.approx(90.0, abs=1e-3)
+    assert internal.sent_action[0] == pytest.approx(2.0, abs=1e-3)
     assert internal.sent_action[1] == pytest.approx(0.5, abs=1e-6)
     assert internal.sent_goal_time == pytest.approx(0.2)
 
@@ -204,11 +209,72 @@ def test_send_action_rejects_short_action(fake_pinocchio: SimpleNamespace) -> No
         adapter.send_action(np.zeros(6, dtype=np.float32))
 
 
+def test_send_action_rejects_non_1d_action(fake_pinocchio: SimpleNamespace) -> None:
+    adapter = _create_adapter(fake_pinocchio)
+
+    with pytest.raises(ValueError, match="Expected 1D"):
+        adapter.send_action(np.zeros((1, 7), dtype=np.float32))
+
+
+def test_send_action_rejects_non_finite_action(fake_pinocchio: SimpleNamespace) -> None:
+    adapter = _create_adapter(fake_pinocchio)
+    target = np.array([np.nan, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+
+    with pytest.raises(ValueError, match="finite"):
+        adapter.send_action(target)
+
+
 def test_send_action_rejects_zero_quaternion(fake_pinocchio: SimpleNamespace) -> None:
     adapter = _create_adapter(fake_pinocchio)
 
     with pytest.raises(ValueError, match="Quaternion"):
         adapter.send_action(np.zeros(7, dtype=np.float32))
+
+
+def test_send_action_rejects_large_cartesian_delta(fake_pinocchio: SimpleNamespace) -> None:
+    adapter = _create_adapter(fake_pinocchio)
+    target = np.array([0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+
+    with pytest.raises(ValueError, match="Cartesian target delta"):
+        adapter.send_action(target)
+
+
+def test_send_action_rejects_large_orientation_delta(fake_pinocchio: SimpleNamespace) -> None:
+    adapter = _create_adapter(fake_pinocchio)
+    target = np.array([0.0, 0.0, 0.0, 0.0, 0.0, np.sin(0.5), np.cos(0.5)], dtype=np.float32)
+
+    with pytest.raises(ValueError, match="Orientation target delta"):
+        adapter.send_action(target)
+
+
+def test_send_action_rejects_large_joint_delta(fake_pinocchio: SimpleNamespace) -> None:
+    adapter = _create_adapter(
+        fake_pinocchio,
+        safety_options=KinematicSafetyOptions(max_cartesian_delta_m=None, max_orientation_delta_rad=None),
+    )
+    target = np.array([np.deg2rad(20.0), 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+
+    with pytest.raises(ValueError, match="IK joint delta"):
+        adapter.send_action(target)
+
+
+def test_send_action_allows_disabled_safety_limits(fake_pinocchio: SimpleNamespace) -> None:
+    internal = _FakeInternalRobot()
+    adapter = _create_adapter(
+        fake_pinocchio,
+        internal,
+        safety_options=KinematicSafetyOptions(
+            max_cartesian_delta_m=None,
+            max_orientation_delta_rad=None,
+            max_joint_delta_deg=None,
+        ),
+    )
+    target = np.array([np.deg2rad(20.0), 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+
+    adapter.send_action(target)
+
+    assert internal.sent_action is not None
+    assert internal.sent_action[0] == pytest.approx(20.0, abs=1e-3)
 
 
 def test_inverse_kinematics_options_validate_values() -> None:
@@ -220,6 +286,17 @@ def test_inverse_kinematics_options_validate_values() -> None:
 
     with pytest.raises(ValueError, match="damping"):
         InverseKinematicsOptions(damping=-1.0)
+
+
+def test_kinematic_safety_options_validate_values() -> None:
+    with pytest.raises(ValueError, match="max_cartesian_delta_m"):
+        KinematicSafetyOptions(max_cartesian_delta_m=0.0)
+
+    with pytest.raises(ValueError, match="max_orientation_delta_rad"):
+        KinematicSafetyOptions(max_orientation_delta_rad=0.0)
+
+    with pytest.raises(ValueError, match="max_joint_delta_deg"):
+        KinematicSafetyOptions(max_joint_delta_deg=0.0)
 
 
 def test_missing_pinocchio_has_helpful_error() -> None:
