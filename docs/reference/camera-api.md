@@ -36,7 +36,7 @@ class CameraType(StrEnum):
     BASLER = "basler"
 ```
 
-> **Note:** IP camera support may be available through the UVC backend but is not verified or tested.
+> **Note:** IP cameras are supported by `IPCamera`, which uses OpenCV to open RTSP/HTTP-style streams and keeps only the newest frame.
 
 ## Read Semantics
 
