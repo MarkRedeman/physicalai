@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -151,6 +152,13 @@ def derive_service_name(
     if not isinstance(init_args, Mapping):
         init_args = {}
     device_id = init_args.get("serial_number", init_args.get("device", 0))
+    if isinstance(device_id, str) and device_id.startswith("/dev/v4l/by-path/"):
+        # A by-path selector follows a physical USB port. Do not resolve it to
+        # videoN because that number changes after re-enumeration.
+        port = Path(device_id).name.rsplit("-video-index", 1)[0]
+        token = sha256(port.encode()).hexdigest()[:16]
+        return f"physicalai/camera/{class_name}/port-{token}/frame"
+
     # Resolve symlinks so that /dev/v4l/by-id/... and /dev/videoN produce
     # the same service name for the same physical device.
     if isinstance(device_id, str) and device_id.startswith("/dev/"):

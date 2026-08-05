@@ -25,6 +25,10 @@ class DeviceInfo(BaseModel):
     hardware_id: str | None = Field(
         default=None, description="Stable cross-backend identifier such as a serial number or USB bus path."
     )
+    physical_port: str | None = Field(
+        default=None,
+        description="Physical attachment path; stable only while the device remains in that port.",
+    )
     manufacturer: str | None = Field(default=None, description="Device manufacturer (e.g. 'Intel', 'Basler').")
     model: str | None = Field(default=None, description="Device model when available.")
     id_stable: bool = Field(

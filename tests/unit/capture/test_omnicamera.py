@@ -590,6 +590,56 @@ def test_discover_demotes_by_id_when_a_same_model_twin_has_none(
     assert devices[0].hardware_id == _INNOMAKER_BY_ID
 
 
+def test_discover_uses_by_path_for_same_model_twins(
+    omnicamera_cls: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same-serial cameras persist by physical USB port when links exist."""
+    camera_cls, mock_omni_camera = omnicamera_cls
+    monkeypatch.setattr(sys, "platform", "linux")
+    mock_omni_camera.query.return_value = [
+        _make_cam_info(40, _INNOMAKER_BY_ID, name="Innomaker-U20CAM-1080p-S1"),
+        _make_cam_info(42, "index:42", name="Innomaker-U20CAM-1080p-S1", id_stable=False),
+    ]
+    module = sys.modules[camera_cls.__module__]
+    identities = {
+        40: module._UsbIdentity(  # noqa: SLF001
+            "3-6.1",
+            _INNOMAKER_USB,
+            "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.1:1.0-video-index0",
+        ),
+        42: module._UsbIdentity(  # noqa: SLF001
+            "3-6.2",
+            _INNOMAKER_USB,
+            "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.2:1.0-video-index0",
+        ),
+    }
+    monkeypatch.setattr(module, "_usb_identity", identities.get)
+
+    devices = camera_cls.discover()
+
+    assert [device.device_id for device in devices] == [
+        "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.1:1.0-video-index0",
+        "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.2:1.0-video-index0",
+    ]
+    assert all(device.id_stable for device in devices)
+    assert all(device.metadata["serial_collision"] for device in devices)
+    assert devices[0].physical_port == "pci-0000:00:14.0-usb-0:6.1:1.0"
+
+
+def test_connect_by_path_opens_resolved_video_index(omnicamera_cls: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A by-path selector opens its current V4L2 node, not an ambiguous by-id."""
+    camera_cls, mock_omni_camera = omnicamera_cls
+    path = "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.1:1.0-video-index0"
+    mock_omni_camera.query.return_value = [_make_cam_info(42, "index:42", id_stable=False)]
+    module = sys.modules[camera_cls.__module__]
+    monkeypatch.setattr(module, "_by_path_video_index", lambda value: 42 if value == path else None)
+
+    camera_cls(device_id=path).connect()
+
+    mock_omni_camera.Camera.assert_called_with(42)
+
+
 def test_discover_keeps_distinct_models_sharing_a_generic_serial(
     omnicamera_cls: tuple,
     monkeypatch: pytest.MonkeyPatch,

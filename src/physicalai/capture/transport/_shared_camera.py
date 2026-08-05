@@ -160,6 +160,7 @@ class SharedCamera(Camera):
 
         super().__init__(color_mode=color_mode)
         self._camera = recipe
+        self._device_id = _recipe_device_id(recipe)
         self._service_name: str = service_name
         self._zero_copy = zero_copy
         self._validate_on_connect = validate_on_connect
@@ -658,6 +659,8 @@ class SharedCamera(Camera):
 
     @property
     def device_id(self) -> str:
+        if self._device_id:
+            return self._device_id
         # service_name format: physicalai/camera/<class_name>/<device_id>/frame
         parts = self._service_name.split("/")
         if (
@@ -669,3 +672,14 @@ class SharedCamera(Camera):
             return parts[3]
         # Custom service_name (from_publisher) — no embedded device id.
         return ""
+
+
+def _recipe_device_id(recipe: ComponentConfig | None) -> str:
+    """Return the original camera selector without resolving symlinks."""
+    if recipe is None:
+        return ""
+    init_args = recipe.get("init_args", {})
+    if not isinstance(init_args, Mapping):
+        return ""
+    device = init_args.get("serial_number", init_args.get("device", ""))
+    return str(device)

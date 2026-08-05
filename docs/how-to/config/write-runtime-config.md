@@ -23,7 +23,9 @@ runtime:
     wrist:
       class_path: physicalai.capture.UVCCamera
       init_args:
-        device: /dev/v4l/by-id/usb-Example_Wrist_Camera-video-index0
+        # Use by-path for identical cameras that share a USB serial. It follows
+        # this USB port and remains stable while the cable stays connected here.
+        device: /dev/v4l/by-path/pci-0000:00:14.0-usb-0:2.1.2:1.0-video-index0
         width: 640
         height: 480
   fps: 30

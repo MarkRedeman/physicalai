@@ -28,9 +28,14 @@ Camera instances are not thread-safe. Use one thread per camera instance or add 
 
 ## Device Identity
 
-`discover()` prefers a stable identifier over a video index, so a camera keeps
-the same `device_id` across reboot and replug. `id_stable=True` marks a
-`device_id` that is safe to persist in config.
+`discover()` prefers a stable identifier over a video index. `id_stable=True`
+marks a `device_id` that is safe to persist in config.
+
+On Linux, UVC cameras with unique USB serials use `/dev/v4l/by-id/...`.
+Identical cameras that share a serial use `/dev/v4l/by-path/...` instead. A
+by-path selector identifies a fixed USB port and remains stable across reboot
+and replugging into the same topology, but it intentionally changes if the
+camera cable moves to another port.
 
 ## SharedCamera
 

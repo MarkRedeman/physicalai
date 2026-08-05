@@ -34,6 +34,18 @@ _SHAREABLE_CLASS_PATHS: dict[str, str] = {
 }
 
 
+def _camera_display(driver: str, device: Any) -> str:  # noqa: ANN401
+    """Format one discovered camera for interactive selection.
+
+    Returns:
+        Human-readable camera label, including a colliding camera's port.
+    """
+    metadata = device.metadata or {}
+    port = device.physical_port or metadata.get("physical_port", "")
+    suffix = f" [{port}]" if metadata.get("serial_collision", False) and port else ""
+    return f"{driver}: {device.name or device.device_id}{suffix}"
+
+
 def create_camera(camera_type: str, *, shared: bool = False, **kwargs: Any) -> Camera:  # noqa: ANN401
     """Create a camera by type name.
 
@@ -153,9 +165,11 @@ def select_cameras_interactive(
     logger.info("Discovering cameras...")
     all_devices = discover_all()
 
-    flat: list[tuple[str, str, str]] = []
-    for driver, devices in all_devices.items():
-        flat.extend((driver, dev.device_id, f"{driver}: {dev.name or dev.device_id}") for dev in devices)
+    flat = [
+        (driver, device.device_id, _camera_display(driver, device))
+        for driver, devices in all_devices.items()
+        for device in devices
+    ]
 
     if not flat:
         logger.warning("No cameras found. Continuing without cameras.")

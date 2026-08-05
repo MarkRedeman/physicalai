@@ -436,6 +436,20 @@ class TestSharedCameraConstruction:
         }
         assert names == {"physicalai/camera/UVCCamera/0/frame"}
 
+    def test_by_path_derives_stable_port_service_name(self) -> None:
+        """A port selector does not inherit the transient video-node name."""
+        camera = {
+            "class_path": "physicalai.capture.UVCCamera",
+            "init_args": {
+                "device": "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:2.1.2:1.0-video-index0",
+            },
+        }
+
+        service_name = derive_service_name(camera)
+
+        assert service_name.startswith("physicalai/camera/UVCCamera/port-")
+        assert service_name.endswith("/frame")
+
     def test_third_party_with_explicit_service_name(self) -> None:
         cam = SharedCamera.from_config(
             {"class_path": FAKE_CAMERA_CLASS, "init_args": {"width": 64}},

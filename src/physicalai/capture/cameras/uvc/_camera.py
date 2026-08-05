@@ -34,6 +34,8 @@ class UVCCamera(Camera):
         device: Unified device selector.
             - On Linux (V4L2): ``0`` maps to ``/dev/video0``.
             - On macOS/Windows (OmniCamera): ``0`` maps to OmniCamera index ``0``.
+            - On Linux, ``/dev/v4l/by-path/...`` persistently identifies a
+              camera connected to a fixed USB port.
         width: Requested frame width in pixels.
         height: Requested frame height in pixels.
         fps: Requested frames per second.

@@ -26,6 +26,7 @@ _MISSING_DEP_PKG = "omni_camera"
 _MISSING_DEP_EXTRA = "capture"
 
 _SYSFS_V4L2 = Path("/sys/class/video4linux")
+_V4L_BY_PATH = Path("/dev/v4l/by-path")
 
 
 class _UsbIdentity(NamedTuple):
@@ -40,6 +41,9 @@ class _UsbIdentity(NamedTuple):
     An unreported serial is empty, which is itself a collision key: udev omits
     it from the by-id name, so every unit of such a model claims one path.
     """
+
+    by_path: str = ""
+    """Openable by-path selector for this V4L2 node."""
 
 
 def _usb_identity(index: int) -> _UsbIdentity | None:
@@ -66,7 +70,50 @@ def _usb_identity(index: int) -> _UsbIdentity | None:
         )
     except OSError:
         return None
-    return _UsbIdentity(devpath=path.name, model_key=cast("tuple[str, str, str]", attrs))
+    return _UsbIdentity(
+        devpath=path.name,
+        model_key=cast("tuple[str, str, str]", attrs),
+        by_path=_by_path_selector(index),
+    )
+
+
+def _by_path_selector(index: int) -> str:
+    """Return the canonical by-path selector for a V4L2 node."""
+    if not _V4L_BY_PATH.is_dir():
+        return ""
+    target = Path(f"/dev/video{index}")
+    try:
+        matches = [link for link in _V4L_BY_PATH.iterdir() if link.resolve() == target]
+    except OSError:
+        return ""
+    if not matches:
+        return ""
+    matches.sort(key=lambda link: ("usbv" in link.name, link.name))
+    return str(matches[0])
+
+
+def _physical_port(identity: _UsbIdentity | None) -> str | None:
+    """Return the ID_PATH portion of a by-path selector."""
+    if identity is None or not identity.by_path:
+        return None
+    name = Path(identity.by_path).name
+    return name.rsplit("-video-index", 1)[0]
+
+
+def _by_path_video_index(device_id: str) -> int | None:
+    """Resolve a by-path selector to its current V4L2 index.
+
+    Returns:
+        Current video index, or None when the selector is not a valid by-path.
+    """
+    if not device_id.startswith("/dev/v4l/by-path/"):
+        return None
+    try:
+        name = Path(device_id).resolve().name
+    except OSError:
+        return None
+    suffix = name.removeprefix("video")
+    return int(suffix) if suffix.isdecimal() else None
 
 
 def _device_key(info: omni_camera.CameraInfo, usb: dict[int, _UsbIdentity | None]) -> str:
@@ -172,6 +219,11 @@ class OmniCamera(Camera):
             match = next((c for c in infos if c.unique_id and c.unique_id == device_id), None)
             if match is not None:
                 return match
+            by_path_index = _by_path_video_index(device_id)
+            if by_path_index is not None:
+                match = next((c for c in infos if c.index == by_path_index), None)
+                if match is not None:
+                    return match
 
         # Fall back to index-based resolution.
         normalized_device_id: int
@@ -223,6 +275,9 @@ class OmniCamera(Camera):
             CaptureError: The requested unique_id denotes more than one camera.
         """
         info = cls._resolve_device_info(infos, device_id)
+
+        if isinstance(device_id, str) and _by_path_video_index(device_id) is not None:
+            return info.index
 
         # Did the config name the camera's unique_id, or a video index?
         # ``index:N`` is an index: it is the backend's own spelling of one,
@@ -355,7 +410,12 @@ class OmniCamera(Camera):
         deadline = time.monotonic() + timeout
         while True:
             try:
-                frame_data, seq = self._cam.poll_frame_np_with_seq()
+                result = self._cam.poll_frame_np_with_seq()
+                if result is not None:
+                    frame_data, seq = result
+                else:
+                    frame_data = None
+                    seq = self._sequence
                 if frame_data is not None and seq != self._sequence:
                     converted = self._convert_color(frame_data)
                     self._sequence = seq
@@ -381,12 +441,14 @@ class OmniCamera(Camera):
             raise err
 
         try:
-            frame_data, seq = self._cam.poll_frame_np_with_seq()
-            if frame_data is not None:
-                converted = self._convert_color(frame_data)
-                self._sequence = seq
-                self._last_frame = frame_data
-                return Frame(data=converted, timestamp=time.monotonic(), sequence=self._sequence)
+            result = self._cam.poll_frame_np_with_seq()
+            if result is not None:
+                frame_data, seq = result
+                if frame_data is not None:
+                    converted = self._convert_color(frame_data)
+                    self._sequence = seq
+                    self._last_frame = frame_data
+                    return Frame(data=converted, timestamp=time.monotonic(), sequence=self._sequence)
         except Exception as exc:
             self._do_disconnect()
             msg = f"Failed to read frame from device: {self.device_id}"
@@ -415,20 +477,32 @@ class OmniCamera(Camera):
     def discover(cls, *, only_usable: bool = True) -> list[DeviceInfo]:
         from physicalai.capture.discovery import DeviceInfo  # noqa: PLC0415
 
-        infos = omni_camera.query(only_usable=only_usable)
-        ambiguous = cls._ambiguous_indices(infos)
+        all_infos = omni_camera.query(only_usable=False)
+        infos = [info for info in all_infos if not only_usable or info.can_open()]
+        ambiguous = cls._ambiguous_indices(all_infos)
+        usb = {info.index: _usb_identity(info.index) for info in all_infos}
 
         devices: list[DeviceInfo] = []
         for info in cls._physical_cameras(infos):
             has_collision = info.index in ambiguous
-            stable = bool(info.id_stable and info.unique_id and not has_collision)
+            identity = usb.get(info.index)
+            by_path = identity.by_path if identity is not None else ""
+            if has_collision and by_path:
+                device_id = by_path
+                hardware_id = _physical_port(identity)
+                stable = True
+            else:
+                stable = bool(info.id_stable and info.unique_id and not has_collision)
+                device_id = info.unique_id if stable else str(info.index)
+                hardware_id = info.unique_id or None
             devices.append(
                 DeviceInfo(
-                    device_id=info.unique_id if stable else str(info.index),
+                    device_id=device_id,
                     index=info.index,
                     name=info.name,
                     driver="uvc",
-                    hardware_id=info.unique_id or None,
+                    hardware_id=hardware_id,
+                    physical_port=_physical_port(identity),
                     id_stable=stable,
                     manufacturer="",
                     model=info.name,
@@ -438,6 +512,11 @@ class OmniCamera(Camera):
                         "backend": "omnicamera",
                         "unique_id": info.unique_id or "",
                         "serial_collision": has_collision,
+                        "usb_devpath": identity.devpath if identity is not None else "",
+                        "usb_vid": identity.model_key[0] if identity is not None else "",
+                        "usb_pid": identity.model_key[1] if identity is not None else "",
+                        "usb_serial": identity.model_key[2] if identity is not None else "",
+                        "by_path": by_path,
                     },
                 )
             )
