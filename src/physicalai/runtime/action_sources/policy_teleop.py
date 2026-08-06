@@ -6,10 +6,14 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import select
+import shutil
+import subprocess  # ruff: ignore[suspicious-subprocess-import] # nosec: B404
 import sys
 import termios
+import threading
 import time
 import tty
 from enum import StrEnum
@@ -29,6 +33,8 @@ if TYPE_CHECKING:
     from physicalai.runtime._callback_bus import _CallbackBus
     from physicalai.runtime.action_sources.policy import PolicySource
     from physicalai.runtime.action_sources.teleop import TeleopSource
+
+logger = logging.getLogger(__name__)
 
 
 class ActionMode(StrEnum):
@@ -75,11 +81,69 @@ class _TerminalKeyReader:
         self._settings = None
 
 
+class _AudioCuePlayer:
+    """Play speech cues in a daemon thread so control ticks never block."""
+
+    def __init__(self) -> None:
+        self._warned = False
+
+    def play(self, message: str) -> None:
+        """Start playback of *message* without waiting for it to complete."""
+        try:
+            threading.Thread(target=self._play, args=(message,), daemon=True).start()
+        except RuntimeError:
+            self._warn_once("Could not start audio cue thread")
+
+    def _play(self, message: str) -> None:
+        speaker_path = shutil.which("espeak")
+        player_path = shutil.which("aplay")
+        if speaker_path is None or player_path is None:
+            self._warn_once("Audio cues unavailable: espeak and aplay must be installed")
+            return
+
+        speaker: subprocess.Popen[bytes] | None = None
+        try:
+            speaker = subprocess.Popen(  # ruff: ignore[subprocess-without-shell-equals-true] # nosec: B603
+                [speaker_path, "--stdout", message],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+            assert speaker.stdout is not None  # ruff: ignore[assert]
+            player = subprocess.Popen(  # ruff: ignore[subprocess-without-shell-equals-true] # nosec: B603
+                [player_path, "-q"],
+                stdin=speaker.stdout,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError as exc:
+            if speaker is not None:
+                speaker.terminate()
+                speaker.wait()
+            self._warn_once(f"Audio cues unavailable: {exc}")
+            return
+
+        speaker.stdout.close()
+        speaker.wait()
+        player.wait()
+
+    def _warn_once(self, message: str) -> None:
+        if not self._warned:
+            logger.warning(message)
+            self._warned = True
+
+
 _MODE_METRICS = {
     ActionMode.POLICY: 0.0,
     ActionMode.ARMING: 1.0,
     ActionMode.HOLD: 2.0,
     ActionMode.TELEOP: 3.0,
+}
+
+_AUDIO_CUES = {
+    ActionMode.ARMING: "Teleop armed. Align leader.",
+    ActionMode.HOLD: "Leader aligned. Teleop ready.",
+    ActionMode.TELEOP: "Teleop enabled.",
+    ActionMode.POLICY: "Policy enabled.",
 }
 
 
@@ -105,6 +169,8 @@ class PolicyTeleopSource(ActionSource):
         stable_duration_s: Time the leader must stay within tolerance before
             entering the hold state.
         toggle_key: Single keyboard key used to arm, engage, and exit teleop.
+        audio_cues: Whether to announce state changes through ``espeak`` and
+            ``aplay``. Enabled by default.
     """
 
     def __init__(
@@ -115,6 +181,7 @@ class PolicyTeleopSource(ActionSource):
         position_tolerance: float = 0.05,
         stable_duration_s: float = 0.25,
         toggle_key: str = "t",
+        audio_cues: bool = True,
     ) -> None:
         """Initialize the policy/teleoperation handoff source.
 
@@ -137,7 +204,9 @@ class PolicyTeleopSource(ActionSource):
         self._position_tolerance = position_tolerance
         self._stable_duration_s = stable_duration_s
         self._toggle_key = toggle_key
+        self._audio_cues = audio_cues
         self._keyboard = _TerminalKeyReader()
+        self._audio = _AudioCuePlayer()
         self._mode = ActionMode.POLICY
         self._within_tolerance_since: float | None = None
         self._hold_action: np.ndarray | None = None
@@ -207,12 +276,12 @@ class PolicyTeleopSource(ActionSource):
 
     def _toggle(self) -> None:
         if self._mode is ActionMode.POLICY:
-            self._mode = ActionMode.ARMING
+            self._set_mode(ActionMode.ARMING)
             self._within_tolerance_since = None
         elif self._mode is ActionMode.HOLD:
-            self._mode = ActionMode.TELEOP
+            self._set_mode(ActionMode.TELEOP)
         elif self._mode is ActionMode.TELEOP:
-            self._mode = ActionMode.POLICY
+            self._set_mode(ActionMode.POLICY)
             self._policy.action_queue.clear()
 
     def _update_arming(self, robot_state: RobotObservation) -> None:
@@ -227,10 +296,15 @@ class PolicyTeleopSource(ActionSource):
             if self._within_tolerance_since is None:
                 self._within_tolerance_since = now
             if now - self._within_tolerance_since >= self._stable_duration_s:
-                self._mode = ActionMode.HOLD
+                self._set_mode(ActionMode.HOLD)
                 self._hold_action = follower_action.copy()
         else:
             self._within_tolerance_since = None
+
+    def _set_mode(self, mode: ActionMode) -> None:
+        self._mode = mode
+        if self._audio_cues:
+            self._audio.play(_AUDIO_CUES[mode])
 
     def _emit_mode(self, step: int) -> None:
         if self._bus is not None:

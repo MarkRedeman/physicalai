@@ -59,6 +59,9 @@ alignment gate until a second `t` engages teleop; press `t` again to return to
 policy. The source exposes its `mode` and emits it as the `action_mode` metric
 (`policy=0`, `arming=1`, `hold=2`, `teleop=3`) so a future recorder can label
 intervention segments.
+Audio cues are enabled by default and announce when teleop is armed, ready,
+active, and when policy control resumes. Set `audio_cues=False` for systems
+without `espeak` and `aplay`.
 
 ```python
 class HILCallback:

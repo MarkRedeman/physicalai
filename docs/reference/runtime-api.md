@@ -72,6 +72,7 @@ PolicyTeleopSource(
     position_tolerance: float = 0.05,
     stable_duration_s: float = 0.25,
     toggle_key: str = "t",
+    audio_cues: bool = True,
 )
 ```
 
@@ -80,7 +81,9 @@ Press `t` to arm teleop; policy remains active until every mapped leader joint
 is within `position_tolerance` of the follower for `stable_duration_s`. The
 follower then holds position until a second press activates teleop. A final
 press returns to policy and discards queued policy actions generated during the
-intervention.
+intervention. It announces each transition with `espeak` and `aplay` by
+default; set `audio_cues=False` if those Linux utilities are unavailable or
+audio feedback is not desired.
 ```
 
 ## `Execution`

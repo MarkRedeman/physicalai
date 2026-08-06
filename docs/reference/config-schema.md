@@ -87,6 +87,7 @@ action_source:
     position_tolerance: 0.05
     stable_duration_s: 0.25
     toggle_key: t
+    audio_cues: true
 ```
 
 ## Manifest ComponentSpec

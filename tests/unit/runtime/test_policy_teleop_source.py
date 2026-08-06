@@ -38,7 +38,7 @@ class _Source:
 
 
 def _source(
-    *, policy: np.ndarray, teleop: np.ndarray, stable_duration_s: float = 0.25
+    *, policy: np.ndarray, teleop: np.ndarray, stable_duration_s: float = 0.25, audio_cues: bool = True
 ) -> tuple[PolicyTeleopSource, _Source, _Source]:
     policy_child = _Source(policy)
     teleop_child = _Source(teleop)
@@ -47,8 +47,10 @@ def _source(
         teleop=teleop_child,  # type: ignore[arg-type]
         position_tolerance=0.05,
         stable_duration_s=stable_duration_s,
+        audio_cues=audio_cues,
     )
     source._keyboard = MagicMock()
+    source._audio = MagicMock()
     return source, policy_child, teleop_child
 
 
@@ -122,6 +124,40 @@ class TestPolicyTeleopSource:
         assert source.mode is ActionMode.POLICY
         assert np.array_equal(result, policy.action)
         policy.action_queue.clear.assert_called_once()
+
+    def test_announces_each_handoff_transition(self) -> None:
+        source, _policy, _teleop = _source(
+            policy=np.array([10.0]), teleop=np.array([1.0]), stable_duration_s=0.0
+        )
+        keyboard = source._keyboard
+        keyboard.read_key.side_effect = ["t", "t", "t"]
+        observation = FakeRobotObservation(joint_positions=np.array([1.0]))
+        source.connect(bus=MagicMock(), session_id="session")
+
+        source.update(observation, {}, 0)
+        source.update(observation, {}, 1)
+        source.update(observation, {}, 2)
+
+        assert source._audio.play.call_args_list == [
+            (("Teleop armed. Align leader.",),),
+            (("Leader aligned. Teleop ready.",),),
+            (("Teleop enabled.",),),
+            (("Policy enabled.",),),
+        ]
+
+    def test_can_disable_audio_cues(self) -> None:
+        source, _policy, _teleop = _source(
+            policy=np.array([10.0]), teleop=np.array([1.0]), stable_duration_s=0.0, audio_cues=False
+        )
+        keyboard = source._keyboard
+        keyboard.read_key.side_effect = ["t", "t"]
+        observation = FakeRobotObservation(joint_positions=np.array([1.0]))
+        source.connect(bus=MagicMock(), session_id="session")
+
+        source.update(observation, {}, 0)
+        source.update(observation, {}, 1)
+
+        source._audio.play.assert_not_called()
 
     @pytest.mark.parametrize(
         ("kwargs", "message"),

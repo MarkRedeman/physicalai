@@ -325,6 +325,7 @@ class TestPolicyTeleopSourceComponentConfig:
             position_tolerance=0.1,
             stable_duration_s=0.5,
             toggle_key="i",
+            audio_cues=False,
         )
 
         wire = _assert_construction_round_trip(source)
@@ -334,6 +335,7 @@ class TestPolicyTeleopSourceComponentConfig:
         assert wire["init_args"]["position_tolerance"] == 0.1
         assert wire["init_args"]["stable_duration_s"] == 0.5
         assert wire["init_args"]["toggle_key"] == "i"
+        assert wire["init_args"]["audio_cues"] is False
 
 
 # ---------------------------------------------------------------------------
