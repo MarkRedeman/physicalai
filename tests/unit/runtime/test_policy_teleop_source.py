@@ -26,6 +26,10 @@ class _Source:
     disconnected: bool = False
     action_queue: MagicMock = field(default_factory=MagicMock)
 
+    @property
+    def joint_names(self) -> list[str]:
+        return ["shoulder_pan", "shoulder_lift"]
+
     def connect(self, *, bus: Any, session_id: str) -> None:  # noqa: ANN401
         self.connected = True
 
@@ -152,7 +156,7 @@ class TestPolicyTeleopSource:
         observation = FakeRobotObservation(joint_positions=np.array([1.0]))
         source.connect(bus=MagicMock(), session_id="session")
 
-        with patch("physicalai.runtime.action_sources.policy_teleop.time.monotonic", side_effect=[0.0, 0.2, 0.6]):
+        with patch("physicalai.runtime.action_sources.policy_teleop.time.monotonic", side_effect=[0.0, 0.2, 0.6, 1.0]):
             source.update(observation, {}, 0)
             source._teleop.action = np.array([2.0])
             source.update(observation, {}, 1)
@@ -162,6 +166,27 @@ class TestPolicyTeleopSource:
 
         assert source.mode is ActionMode.HOLD
         assert policy.updates == 4
+
+    def test_prints_joint_alignment_guidance_at_most_once_per_second(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        source, _policy, _teleop = _source(policy=np.array([10.0, 11.0]), teleop=np.array([1.0, 4.0]))
+        keyboard = source._keyboard
+        keyboard.read_key.side_effect = ["t", None, None]
+        observation = FakeRobotObservation(joint_positions=np.array([3.0, 2.0]))
+        source.connect(bus=MagicMock(), session_id="session")
+        capsys.readouterr()
+
+        with patch("physicalai.runtime.action_sources.policy_teleop.time.monotonic", side_effect=[0.0, 0.5, 1.1]):
+            source.update(observation, {}, 0)
+            source.update(observation, {}, 1)
+            source.update(observation, {}, 2)
+
+        assert capsys.readouterr().out.splitlines() == [
+            "[physicalai] Teleop armed. Align leader with follower.",
+            "[physicalai] Align leader: shoulder_pan increase (2.0), shoulder_lift decrease (2.0)",
+            "[physicalai] Align leader: shoulder_pan increase (2.0), shoulder_lift decrease (2.0)",
+        ]
 
     def test_toggle_from_teleop_returns_to_policy_and_clears_queue(self) -> None:
         source, policy, _teleop = _source(

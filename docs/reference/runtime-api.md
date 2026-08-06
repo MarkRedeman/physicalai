@@ -86,7 +86,9 @@ policy and discards queued policy actions generated during the intervention. It
 announces each transition with `espeak` and `aplay` by
 default; set `audio_cues=False` if those Linux utilities are unavailable or
 audio feedback is not desired. It also prints the active mode and next key
-action in the terminal on startup and every transition.
+action in the terminal on startup and every transition. While aligning, it
+prints rate-limited per-joint name, increase/decrease guidance for joints
+outside the tolerance.
 
 Set `leader_follows_follower=True` only for an actuated, same-morphology
 leader that accepts position commands. It commands the leader to follow the

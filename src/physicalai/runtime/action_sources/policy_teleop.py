@@ -153,6 +153,8 @@ _TERMINAL_CUES = {
     ActionMode.TELEOP: "Teleop active. Press 't' to resume policy.",
 }
 
+_ALIGNMENT_STATUS_INTERVAL_S = 1.0
+
 
 @export_config(class_path="physicalai.runtime.PolicyTeleopSource")
 class PolicyTeleopSource(ActionSource):
@@ -227,6 +229,7 @@ class PolicyTeleopSource(ActionSource):
         self._audio = _AudioCuePlayer()
         self._mode = ActionMode.POLICY
         self._within_tolerance_since: float | None = None
+        self._last_alignment_status: float | None = None
         self._hold_action: np.ndarray | None = None
         self._bus: _CallbackBus | None = None
         self._session_id = ""
@@ -242,6 +245,7 @@ class PolicyTeleopSource(ActionSource):
         self._session_id = session_id
         self._mode = ActionMode.POLICY
         self._within_tolerance_since = None
+        self._last_alignment_status = None
         self._hold_action = None
         self._policy.connect(bus=bus, session_id=session_id)
         try:
@@ -325,6 +329,23 @@ class PolicyTeleopSource(ActionSource):
                 self._hold_action = follower_action.copy()
         else:
             self._within_tolerance_since = None
+            self._print_alignment_status(leader_action, follower_action)
+
+    def _print_alignment_status(self, leader_action: np.ndarray, follower_action: np.ndarray) -> None:
+        now = time.monotonic()
+        if self._last_alignment_status is not None and now - self._last_alignment_status < _ALIGNMENT_STATUS_INTERVAL_S:
+            return
+
+        errors = follower_action - leader_action
+        joints = np.flatnonzero(np.abs(errors) > self._position_tolerance)
+        names = getattr(self._teleop, "joint_names", [])
+        guidance = ", ".join(
+            f"{names[index] if index < len(names) else f'joint {index + 1}'} "
+            f"{'increase' if errors[index] > 0 else 'decrease'} ({abs(errors[index]):.1f})"
+            for index in joints
+        )
+        print(f"[physicalai] Align leader: {guidance}", flush=True)  # ruff: ignore[print]
+        self._last_alignment_status = now
 
     def _set_mode(self, mode: ActionMode) -> None:
         if self._leader_follows_follower:

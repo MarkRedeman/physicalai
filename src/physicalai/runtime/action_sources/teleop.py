@@ -77,6 +77,11 @@ class TeleopSource(ActionSource):
         """
         self._leader.send_action(joint_positions, goal_time=goal_time)
 
+    @property
+    def joint_names(self) -> list[str]:
+        """Ordered leader joint names used for alignment guidance."""
+        return self._leader.joint_names
+
     def set_leader_torque(self, *, enabled: bool) -> None:
         """Enable or disable torque on a command-capable leader.
 

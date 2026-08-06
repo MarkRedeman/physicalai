@@ -34,7 +34,7 @@ init_args:
               port: /dev/ttyACM1
               calibration: /home/intel/Downloads/Leader-calibration.json
               role: follower
-      position_tolerance: 0.05
+      position_tolerance: 5.0
       stable_duration_s: 1.0
       toggle_key: t
       audio_cues: true
