@@ -329,6 +329,7 @@ class TestPolicyTeleopSourceComponentConfig:
             leader_follows_follower=True,
             leader_goal_time=0.2,
             auto_teleop_delay_s=5.0,
+            policy_resume_delay_s=5.0,
         )
 
         wire = _assert_construction_round_trip(source)
@@ -342,6 +343,7 @@ class TestPolicyTeleopSourceComponentConfig:
         assert wire["init_args"]["leader_follows_follower"] is True
         assert wire["init_args"]["leader_goal_time"] == 0.2
         assert wire["init_args"]["auto_teleop_delay_s"] == 5.0
+        assert wire["init_args"]["policy_resume_delay_s"] == 5.0
 
 
 # ---------------------------------------------------------------------------

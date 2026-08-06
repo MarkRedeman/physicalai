@@ -44,6 +44,7 @@ class ActionMode(StrEnum):
     ARMING = "arming"
     HOLD = "hold"
     TELEOP = "teleop"
+    RESUMING = "resuming"
 
 
 class _TerminalKeyReader:
@@ -137,6 +138,7 @@ _MODE_METRICS = {
     ActionMode.ARMING: 1.0,
     ActionMode.HOLD: 2.0,
     ActionMode.TELEOP: 3.0,
+    ActionMode.RESUMING: 4.0,
 }
 
 _AUDIO_CUES = {
@@ -144,6 +146,7 @@ _AUDIO_CUES = {
     ActionMode.HOLD: "Leader aligned. Teleop ready.",
     ActionMode.TELEOP: "Teleop enabled.",
     ActionMode.POLICY: "Policy enabled.",
+    ActionMode.RESUMING: "Returning to policy.",
 }
 
 _TERMINAL_CUES = {
@@ -151,6 +154,7 @@ _TERMINAL_CUES = {
     ActionMode.ARMING: "Teleop armed. Press 't' to cancel.",
     ActionMode.HOLD: "Leader aligned. Follower holding. Press 't' to enable teleop.",
     ActionMode.TELEOP: "Teleop active. Press 't' to resume policy.",
+    ActionMode.RESUMING: "Returning to policy. Press 't' to cancel.",
 }
 
 _ALIGNMENT_STATUS_INTERVAL_S = 1.0
@@ -187,6 +191,8 @@ class PolicyTeleopSource(ActionSource):
         auto_teleop_delay_s: When positive, command an actuated tracking leader
             to the held follower pose, then automatically enable teleop after
             this delay. Requires ``leader_follows_follower=True``.
+        policy_resume_delay_s: Hold both arms at the teleop end pose for this
+            delay before resuming policy. Requires ``leader_follows_follower``.
     """
 
     def __init__(
@@ -201,6 +207,7 @@ class PolicyTeleopSource(ActionSource):
         leader_follows_follower: bool = False,
         leader_goal_time: float = 0.1,
         auto_teleop_delay_s: float = 0.0,
+        policy_resume_delay_s: float = 0.0,
     ) -> None:
         """Initialize the policy/teleoperation handoff source.
 
@@ -226,6 +233,12 @@ class PolicyTeleopSource(ActionSource):
         if auto_teleop_delay_s > 0 and not leader_follows_follower:
             msg = "auto_teleop_delay_s requires leader_follows_follower=True"
             raise ValueError(msg)
+        if policy_resume_delay_s < 0:
+            msg = f"policy_resume_delay_s must be non-negative, got {policy_resume_delay_s}"
+            raise ValueError(msg)
+        if policy_resume_delay_s > 0 and not leader_follows_follower:
+            msg = "policy_resume_delay_s requires leader_follows_follower=True"
+            raise ValueError(msg)
 
         self._policy = policy
         self._teleop = teleop
@@ -236,13 +249,15 @@ class PolicyTeleopSource(ActionSource):
         self._leader_follows_follower = leader_follows_follower
         self._leader_goal_time = leader_goal_time
         self._auto_teleop_delay_s = auto_teleop_delay_s
+        self._policy_resume_delay_s = policy_resume_delay_s
         self._keyboard = _TerminalKeyReader()
         self._audio = _AudioCuePlayer()
         self._mode = ActionMode.POLICY
         self._within_tolerance_since: float | None = None
         self._last_alignment_status: float | None = None
         self._hold_action: np.ndarray | None = None
-        self._auto_teleop_started_at: float | None = None
+        self._countdown_started_at: float | None = None
+        self._countdown_duration_s = 0.0
         self._last_countdown: int | None = None
         self._bus: _CallbackBus | None = None
         self._session_id = ""
@@ -260,7 +275,8 @@ class PolicyTeleopSource(ActionSource):
         self._within_tolerance_since = None
         self._last_alignment_status = None
         self._hold_action = None
-        self._auto_teleop_started_at = None
+        self._countdown_started_at = None
+        self._countdown_duration_s = 0.0
         self._last_countdown = None
         self._policy.connect(bus=bus, session_id=session_id)
         try:
@@ -271,7 +287,9 @@ class PolicyTeleopSource(ActionSource):
             self._policy.disconnect()
             raise
 
-    def update(self, robot_state: RobotObservation, camera_frames: Mapping[str, Frame], step: int) -> np.ndarray:
+    def update(  # ruff: ignore[too-many-branches]
+        self, robot_state: RobotObservation, camera_frames: Mapping[str, Frame], step: int
+    ) -> np.ndarray:
         """Update the warm policy and return an action from the active state.
 
         Returns:
@@ -284,13 +302,14 @@ class PolicyTeleopSource(ActionSource):
         if key == self._toggle_key:
             self._toggle(robot_state)
 
-        # Always update policy so asynchronous execution stays warm while the
-        # operator aligns or controls the leader arm.
-        policy_action = self._policy.update(robot_state, camera_frames, step)
+        policy_action: np.ndarray | None = None
+        if self._mode is ActionMode.POLICY:
+            policy_action = self._policy.update(robot_state, camera_frames, step)
 
         if self._mode is ActionMode.POLICY:
             if self._leader_follows_follower:
                 self._teleop.follow_follower(robot_state.joint_positions, goal_time=self._leader_goal_time)
+            assert policy_action is not None  # ruff: ignore[assert]
             action = policy_action
         elif self._mode is ActionMode.ARMING:
             if self._hold_action is None:  # Defensive: ARMING is only entered with an action.
@@ -308,6 +327,12 @@ class PolicyTeleopSource(ActionSource):
             action = self._hold_action
         elif self._mode is ActionMode.TELEOP:
             action = self._teleop.update(robot_state, camera_frames, step)
+        elif self._mode is ActionMode.RESUMING:
+            if self._hold_action is None:
+                msg = "Policy resume has no follower action"
+                raise RuntimeError(msg)
+            action = self._hold_action
+            self._update_countdown(ActionMode.POLICY)
         else:
             msg = f"Unsupported action mode {self._mode!r}"
             raise RuntimeError(msg)
@@ -330,9 +355,7 @@ class PolicyTeleopSource(ActionSource):
             self._within_tolerance_since = None
             if self._auto_teleop_delay_s > 0:
                 self._teleop.follow_follower(self._hold_action, goal_time=self._leader_goal_time)
-                self._auto_teleop_started_at = time.monotonic()
-                self._last_countdown = None
-                self._announce_countdown()
+                self._start_countdown(self._auto_teleop_delay_s)
             else:
                 self._print("Align leader with follower. Press 't' to cancel.")
         elif self._mode is ActionMode.ARMING:
@@ -340,11 +363,21 @@ class PolicyTeleopSource(ActionSource):
         elif self._mode is ActionMode.HOLD:
             self._set_mode(ActionMode.TELEOP)
         elif self._mode is ActionMode.TELEOP:
-            self._set_mode(ActionMode.POLICY)
-            self._policy.action_queue.clear()
+            if self._policy_resume_delay_s > 0:
+                self._hold_action = np.asarray(robot_state.joint_positions).copy()
+                self._teleop.set_leader_torque(enabled=True)
+                self._teleop.follow_follower(self._hold_action, goal_time=self._leader_goal_time)
+                self._start_countdown(self._policy_resume_delay_s)
+                self._set_mode(ActionMode.RESUMING)
+            else:
+                self._set_mode(ActionMode.POLICY)
+                self._policy.action_queue.clear()
+        elif self._mode is ActionMode.RESUMING:
+            self._set_mode(ActionMode.TELEOP)
 
     def _cancel_arming(self) -> None:
-        self._auto_teleop_started_at = None
+        self._countdown_started_at = None
+        self._countdown_duration_s = 0.0
         self._last_countdown = None
         self._set_mode(ActionMode.POLICY)
         self._policy.action_queue.clear()
@@ -368,27 +401,38 @@ class PolicyTeleopSource(ActionSource):
             self._print_alignment_status(leader_action, follower_action)
 
     def _update_auto_teleop(self) -> None:
-        if self._auto_teleop_started_at is None:
-            msg = "Automatic teleop handoff has no start time"
+        self._update_countdown(ActionMode.TELEOP)
+
+    def _update_countdown(self, next_mode: ActionMode) -> None:
+        if self._countdown_started_at is None:
+            msg = "Countdown has no start time"
             raise RuntimeError(msg)
         now = time.monotonic()
         self._announce_countdown(now)
-        if now - self._auto_teleop_started_at >= self._auto_teleop_delay_s:
-            self._auto_teleop_started_at = None
-            self._set_mode(ActionMode.TELEOP)
+        if now - self._countdown_started_at >= self._countdown_duration_s:
+            self._countdown_started_at = None
+            self._countdown_duration_s = 0.0
+            self._set_mode(next_mode)
+            if next_mode is ActionMode.POLICY:
+                self._policy.action_queue.clear()
+
+    def _start_countdown(self, duration_s: float) -> None:
+        self._countdown_started_at = time.monotonic()
+        self._countdown_duration_s = duration_s
+        self._last_countdown = None
+        self._announce_countdown()
 
     def _announce_countdown(self, now: float | None = None) -> None:
-        if self._auto_teleop_started_at is None:
+        if self._countdown_started_at is None:
             return
         timestamp = time.monotonic() if now is None else now
-        remaining = max(0, int(np.ceil(self._auto_teleop_delay_s - (timestamp - self._auto_teleop_started_at))))
+        remaining = max(0, int(np.ceil(self._countdown_duration_s - (timestamp - self._countdown_started_at))))
         if remaining == self._last_countdown:
             return
         self._last_countdown = remaining
-        message = f"Teleop starts in {remaining}. Press '{self._toggle_key}' to cancel."
-        self._print(message)
+        self._print(f"Countdown: {remaining}. Press '{self._toggle_key}' to cancel.")
         if self._audio_cues:
-            self._audio.play(message)
+            self._audio.play(str(remaining))
 
     def _print_alignment_status(self, leader_action: np.ndarray, follower_action: np.ndarray) -> None:
         now = time.monotonic()

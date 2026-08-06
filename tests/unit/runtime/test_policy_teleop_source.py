@@ -55,6 +55,7 @@ def _source(
     audio_cues: bool = True,
     leader_follows_follower: bool = False,
     auto_teleop_delay_s: float = 0.0,
+    policy_resume_delay_s: float = 0.0,
 ) -> tuple[PolicyTeleopSource, _Source, _Source]:
     policy_child = _Source(policy)
     teleop_child = _Source(teleop)
@@ -66,6 +67,7 @@ def _source(
         audio_cues=audio_cues,
         leader_follows_follower=leader_follows_follower,
         auto_teleop_delay_s=auto_teleop_delay_s,
+        policy_resume_delay_s=policy_resume_delay_s,
     )
     source._keyboard = MagicMock()
     source._audio = MagicMock()
@@ -103,7 +105,7 @@ class TestPolicyTeleopSource:
         # Hold emits the follower position until an explicit second toggle.
         assert np.array_equal(source.update(observation, {}, 2), teleop.action)
         assert source.mode is ActionMode.TELEOP
-        assert policy.updates == 3
+        assert policy.updates == 0
         assert teleop.updates == 3  # Two alignment reads plus active teleop.
 
     def test_leader_can_follow_follower_during_policy(self) -> None:
@@ -115,7 +117,10 @@ class TestPolicyTeleopSource:
 
         source.update(observation, {}, 0)
 
-        teleop.action_queue.follow_follower.assert_called_once_with(observation.joint_positions, goal_time=0.1)
+        assert teleop.action_queue.follow_follower.call_args_list[-1] == (
+            (observation.joint_positions,),
+            {"goal_time": 0.1},
+        )
 
     def test_leader_stops_following_when_teleop_is_armed(self) -> None:
         source, _policy, teleop = _source(
@@ -190,7 +195,10 @@ class TestPolicyTeleopSource:
         assert np.array_equal(source.update(observation, {}, 4), teleop.action)
 
         assert source.mode is ActionMode.TELEOP
-        teleop.action_queue.follow_follower.assert_called_once_with(observation.joint_positions, goal_time=0.1)
+        assert teleop.action_queue.follow_follower.call_args_list[-1] == (
+            (observation.joint_positions,),
+            {"goal_time": 0.1},
+        )
         teleop.action_queue.set_leader_torque.assert_called_once_with(enabled=False)
 
     def test_automatic_handoff_requires_leader_tracking(self) -> None:
@@ -218,7 +226,34 @@ class TestPolicyTeleopSource:
             source.update(observation, {}, 3)
 
         assert source.mode is ActionMode.HOLD
-        assert policy.updates == 4
+        assert policy.updates == 0
+
+    def test_holds_both_arms_before_policy_resume(self) -> None:
+        source, policy, teleop = _source(
+            policy=np.array([10.0]),
+            teleop=np.array([1.0]),
+            stable_duration_s=0.0,
+            leader_follows_follower=True,
+            policy_resume_delay_s=5.0,
+        )
+        keyboard = source._keyboard
+        keyboard.read_key.side_effect = ["t", None, "t", "t", None]
+        observation = FakeRobotObservation(joint_positions=np.array([1.0]))
+        source.connect(bus=MagicMock(), session_id="session")
+
+        with patch("physicalai.runtime.action_sources.policy_teleop.time.monotonic", side_effect=[0.0, 0.0, 0.0, 5.0]):
+            source.update(observation, {}, 0)
+            source.update(observation, {}, 1)
+            source.update(observation, {}, 2)
+            assert np.array_equal(source.update(observation, {}, 3), observation.joint_positions)
+            assert np.array_equal(source.update(observation, {}, 4), policy.action)
+
+        assert source.mode is ActionMode.POLICY
+        assert teleop.action_queue.follow_follower.call_args_list[-1] == (
+            (observation.joint_positions,),
+            {"goal_time": 0.1},
+        )
+        policy.action_queue.clear.assert_called_once()
 
     def test_prints_joint_alignment_guidance_at_most_once_per_second(
         self, capsys: pytest.CaptureFixture[str]

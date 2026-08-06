@@ -76,6 +76,7 @@ PolicyTeleopSource(
     leader_follows_follower: bool = False,
     leader_goal_time: float = 0.1,
     auto_teleop_delay_s: float = 0.0,
+    policy_resume_delay_s: float = 0.0,
 )
 ```
 
@@ -100,7 +101,10 @@ configure a tracking SO-101 leader with `role="follower"` instead.
 
 With an actuated tracking leader, set `auto_teleop_delay_s` to move the leader
 to the held follower pose and automatically begin teleop after a spoken
-countdown. Press `t` during the countdown to cancel and resume policy.
+numeric countdown. Set `policy_resume_delay_s` to hold both arms at the final
+teleop pose before returning to policy. Press `t` during either countdown to
+cancel it. Policy inference is paused during teleop and countdowns, keeping
+the control loop free for leader reads and follower commands.
 ```
 
 ## `Execution`

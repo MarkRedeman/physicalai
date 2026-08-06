@@ -91,6 +91,7 @@ action_source:
     leader_follows_follower: false
     leader_goal_time: 0.1
     auto_teleop_delay_s: 0.0
+    policy_resume_delay_s: 0.0
 ```
 
 `leader_follows_follower` requires a command-capable, same-morphology leader.
