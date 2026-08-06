@@ -53,10 +53,10 @@ The exact observation structure and merging strategy may change as the API stabi
 ## Product Workflows
 
 `PolicyTeleopSource` supports DAgger-style interventions without stopping model
-execution. Press `t` to arm teleop, align the leader with the follower, and
-wait for the configured stable period. The follower holds position after the
-alignment gate until a second `t` engages teleop; press `t` again to return to
-policy. The source exposes its `mode` and emits it as the `action_mode` metric
+execution. Press `t` to arm teleop; the follower immediately holds position
+while the leader is aligned and remains held through the configured stable
+period. A second `t` engages teleop; press `t` again to return to policy. The
+source exposes its `mode` and emits it as the `action_mode` metric
 (`policy=0`, `arming=1`, `hold=2`, `teleop=3`) so a future recorder can label
 intervention segments.
 Audio cues are enabled by default and announce when teleop is armed, ready,

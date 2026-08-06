@@ -159,10 +159,11 @@ class PolicyTeleopSource(ActionSource):
     """Use a policy normally and switch to an aligned teleoperator on demand.
 
     Press ``toggle_key`` once to arm teleoperation. The policy remains in
-    control until the mapped leader position is within ``position_tolerance``
-    of the follower for ``stable_duration_s``. The follower then holds its
-    current position until a second press activates teleoperation. Pressing the
-    key again while teleoperating returns to policy control.
+    inference remains active, but the follower holds its position until the
+    mapped leader position is within ``position_tolerance`` for
+    ``stable_duration_s``. The follower remains held until a second press
+    activates teleoperation. Pressing the key again while teleoperating returns
+    to policy control.
 
     The policy continues inference in all states, so an intervention does not
     require restarting its execution worker. Its queued actions are discarded
@@ -262,7 +263,7 @@ class PolicyTeleopSource(ActionSource):
         """
         key = self._keyboard.read_key()
         if key == self._toggle_key:
-            self._toggle()
+            self._toggle(robot_state)
 
         # Always update policy so asynchronous execution stays warm while the
         # operator aligns or controls the leader arm.
@@ -273,7 +274,10 @@ class PolicyTeleopSource(ActionSource):
                 self._teleop.follow_follower(robot_state.joint_positions, goal_time=self._leader_goal_time)
             action = policy_action
         elif self._mode is ActionMode.ARMING:
-            action = policy_action
+            if self._hold_action is None:  # Defensive: ARMING is only entered with an action.
+                msg = "Teleop arming has no follower action"
+                raise RuntimeError(msg)
+            action = self._hold_action
             self._update_arming(robot_state)
         elif self._mode is ActionMode.HOLD:
             if self._hold_action is None:  # Defensive: HOLD is only entered with an action.
@@ -294,8 +298,9 @@ class PolicyTeleopSource(ActionSource):
         finally:
             self._policy.disconnect()
 
-    def _toggle(self) -> None:
+    def _toggle(self, robot_state: RobotObservation) -> None:
         if self._mode is ActionMode.POLICY:
+            self._hold_action = np.asarray(robot_state.joint_positions).copy()
             self._set_mode(ActionMode.ARMING)
             self._within_tolerance_since = None
         elif self._mode is ActionMode.HOLD:

@@ -79,11 +79,11 @@ PolicyTeleopSource(
 ```
 
 `PolicyTeleopSource` keeps policy inference active throughout an intervention.
-Press `t` to arm teleop; policy remains active until every mapped leader joint
-is within `position_tolerance` of the follower for `stable_duration_s`. The
-follower then holds position until a second press activates teleop. A final
-press returns to policy and discards queued policy actions generated during the
-intervention. It announces each transition with `espeak` and `aplay` by
+Press `t` to arm teleop; the follower immediately holds position while the
+leader is aligned within `position_tolerance` for `stable_duration_s`. It
+remains held until a second press activates teleop. A final press returns to
+policy and discards queued policy actions generated during the intervention. It
+announces each transition with `espeak` and `aplay` by
 default; set `audio_cues=False` if those Linux utilities are unavailable or
 audio feedback is not desired. It also prints the active mode and next key
 action in the terminal on startup and every transition.

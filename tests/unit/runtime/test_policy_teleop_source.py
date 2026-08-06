@@ -89,9 +89,9 @@ class TestPolicyTeleopSource:
         source.connect(bus=MagicMock(), session_id="session")
 
         with patch("physicalai.runtime.action_sources.policy_teleop.time.monotonic", side_effect=[0.0, 0.3]):
-            assert np.array_equal(source.update(observation, {}, 0), policy.action)
+            assert np.array_equal(source.update(observation, {}, 0), observation.joint_positions)
             assert source.mode is ActionMode.ARMING
-            assert np.array_equal(source.update(observation, {}, 1), policy.action)
+            assert np.array_equal(source.update(observation, {}, 1), observation.joint_positions)
             assert source.mode is ActionMode.HOLD
 
         # Hold emits the follower position until an explicit second toggle.
