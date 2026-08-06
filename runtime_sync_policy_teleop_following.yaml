@@ -1,0 +1,65 @@
+class_path: physicalai.runtime.RobotRuntime
+init_args:
+  robot:
+    class_path: physicalai.robot.SO101
+    init_args:
+      port: /dev/ttyACM0
+      calibration: /home/intel/Downloads/Follower-calibration.json
+      role: follower
+  action_source:
+    class_path: physicalai.runtime.PolicyTeleopSource
+    init_args:
+      policy:
+        class_path: physicalai.runtime.PolicySource
+        init_args:
+          model:
+            class_path: physicalai.inference.InferenceModel
+            init_args:
+              export_dir: /home/intel/models/daan/so101_141_eps_snapflow/phase1/phase1-epoch003/exports/openvino
+              device: GPU
+          execution:
+            class_path: physicalai.runtime.SyncExecution
+            init_args:
+              request_threshold: 0.0
+          action_queue:
+            class_path: physicalai.runtime.ChunkedActionQueue
+            init_args: {}
+          task: pick up the brown cube and put it in the black box
+      teleop:
+        class_path: physicalai.runtime.TeleopSource
+        init_args:
+          leader:
+            class_path: physicalai.robot.SO101
+            init_args:
+              port: /dev/ttyACM1
+              calibration: /home/intel/Downloads/Leader-calibration.json
+              role: follower
+      position_tolerance: 0.05
+      stable_duration_s: 0.25
+      toggle_key: t
+      audio_cues: true
+      leader_follows_follower: true
+      leader_goal_time: 0.1
+  fps: 60.0
+  cameras:
+    Gripper:
+      class_path: physicalai.capture.UVCCamera
+      init_args:
+        device: '34'
+        width: 640
+        height: 480
+        fps: 30
+    Overhead:
+      class_path: physicalai.capture.UVCCamera
+      init_args:
+        device: '32'
+        width: 640
+        height: 480
+        fps: 30
+  callbacks:
+  - class_path: physicalai.runtime.RerunCallback
+    init_args:
+      log_images: true
+      mode: spawn
+      save_path: null
+      connect_addr: 127.0.0.1:9876
