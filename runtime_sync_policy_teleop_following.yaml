@@ -40,6 +40,7 @@ init_args:
       audio_cues: true
       leader_follows_follower: true
       leader_goal_time: 0.1
+      auto_teleop_delay_s: 5.0
   fps: 60.0
   cameras:
     Gripper:

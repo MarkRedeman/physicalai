@@ -54,6 +54,7 @@ def _source(
     stable_duration_s: float = 0.25,
     audio_cues: bool = True,
     leader_follows_follower: bool = False,
+    auto_teleop_delay_s: float = 0.0,
 ) -> tuple[PolicyTeleopSource, _Source, _Source]:
     policy_child = _Source(policy)
     teleop_child = _Source(teleop)
@@ -64,6 +65,7 @@ def _source(
         stable_duration_s=stable_duration_s,
         audio_cues=audio_cues,
         leader_follows_follower=leader_follows_follower,
+        auto_teleop_delay_s=auto_teleop_delay_s,
     )
     source._keyboard = MagicMock()
     source._audio = MagicMock()
@@ -144,8 +146,59 @@ class TestPolicyTeleopSource:
 
         assert teleop.action_queue.set_leader_torque.call_args_list == [
             ((), {"enabled": False}),
+            ((), {"enabled": False}),
             ((), {"enabled": True}),
         ]
+
+    def test_can_cancel_arming_and_resume_policy(self) -> None:
+        source, policy, teleop = _source(
+            policy=np.array([10.0]), teleop=np.array([1.0]), leader_follows_follower=True
+        )
+        keyboard = source._keyboard
+        keyboard.read_key.side_effect = ["t", "t"]
+        observation = FakeRobotObservation(joint_positions=np.array([1.0]))
+        source.connect(bus=MagicMock(), session_id="session")
+
+        source.update(observation, {}, 0)
+        action = source.update(observation, {}, 1)
+
+        assert source.mode is ActionMode.POLICY
+        assert np.array_equal(action, policy.action)
+        policy.action_queue.clear.assert_called_once()
+        assert teleop.action_queue.set_leader_torque.call_args_list == [
+            ((), {"enabled": False}),
+            ((), {"enabled": True}),
+        ]
+
+    def test_automatically_starts_teleop_after_countdown(self) -> None:
+        source, _policy, teleop = _source(
+            policy=np.array([10.0]),
+            teleop=np.array([2.0]),
+            leader_follows_follower=True,
+            auto_teleop_delay_s=5.0,
+        )
+        keyboard = source._keyboard
+        keyboard.read_key.side_effect = ["t", None, None, None, None]
+        observation = FakeRobotObservation(joint_positions=np.array([1.0]))
+        source.connect(bus=MagicMock(), session_id="session")
+
+        with patch("physicalai.runtime.action_sources.policy_teleop.time.monotonic", side_effect=[0.0, 0.0, 0.0, 0.0, 0.0, 5.0]):
+            assert np.array_equal(source.update(observation, {}, 0), observation.joint_positions)
+            assert np.array_equal(source.update(observation, {}, 1), observation.joint_positions)
+            assert np.array_equal(source.update(observation, {}, 2), observation.joint_positions)
+            assert np.array_equal(source.update(observation, {}, 3), observation.joint_positions)
+        assert np.array_equal(source.update(observation, {}, 4), teleop.action)
+
+        assert source.mode is ActionMode.TELEOP
+        teleop.action_queue.follow_follower.assert_called_once_with(observation.joint_positions, goal_time=0.1)
+        teleop.action_queue.set_leader_torque.assert_called_once_with(enabled=False)
+
+    def test_automatic_handoff_requires_leader_tracking(self) -> None:
+        policy = _Source(np.array([1.0]))
+        teleop = _Source(np.array([1.0]))
+
+        with pytest.raises(ValueError, match="leader_follows_follower"):
+            PolicyTeleopSource(policy=policy, teleop=teleop, auto_teleop_delay_s=5.0)  # type: ignore[arg-type]
 
     def test_alignment_must_remain_within_tolerance_for_full_duration(self) -> None:
         source, policy, _teleop = _source(
@@ -183,7 +236,8 @@ class TestPolicyTeleopSource:
             source.update(observation, {}, 2)
 
         assert capsys.readouterr().out.splitlines() == [
-            "[physicalai] Teleop armed. Align leader with follower.",
+            "[physicalai] Teleop armed. Press 't' to cancel.",
+            "[physicalai] Align leader with follower. Press 't' to cancel.",
             "[physicalai] Align leader: shoulder_pan increase (2.0), shoulder_lift decrease (2.0)",
             "[physicalai] Align leader: shoulder_pan increase (2.0), shoulder_lift decrease (2.0)",
         ]
@@ -240,7 +294,8 @@ class TestPolicyTeleopSource:
 
         assert capsys.readouterr().out.splitlines() == [
             "[physicalai] Policy active. Press 't' to arm teleop.",
-            "[physicalai] Teleop armed. Align leader with follower.",
+            "[physicalai] Teleop armed. Press 't' to cancel.",
+            "[physicalai] Align leader with follower. Press 't' to cancel.",
             "[physicalai] Leader aligned. Follower holding. Press 't' to enable teleop.",
             "[physicalai] Teleop active. Press 't' to resume policy.",
             "[physicalai] Policy active. Press 't' to arm teleop.",

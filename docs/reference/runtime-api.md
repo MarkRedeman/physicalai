@@ -75,6 +75,7 @@ PolicyTeleopSource(
     audio_cues: bool = True,
     leader_follows_follower: bool = False,
     leader_goal_time: float = 0.1,
+    auto_teleop_delay_s: float = 0.0,
 )
 ```
 
@@ -96,6 +97,10 @@ follower only during policy control, then releases it as soon as teleop is
 armed by disabling leader torque. It restores torque when policy control
 resumes. Passive `SO101(role="leader")` hardware cannot use this option;
 configure a tracking SO-101 leader with `role="follower"` instead.
+
+With an actuated tracking leader, set `auto_teleop_delay_s` to move the leader
+to the held follower pose and automatically begin teleop after a spoken
+countdown. Press `t` during the countdown to cancel and resume policy.
 ```
 
 ## `Execution`
