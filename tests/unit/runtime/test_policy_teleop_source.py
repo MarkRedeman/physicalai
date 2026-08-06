@@ -39,6 +39,9 @@ class _Source:
     def follow_follower(self, joint_positions: np.ndarray, *, goal_time: float) -> None:  # noqa: ARG002
         self.action_queue.follow_follower(joint_positions, goal_time=goal_time)
 
+    def set_leader_torque(self, *, enabled: bool) -> None:
+        self.action_queue.set_leader_torque(enabled=enabled)
+
 
 def _source(
     *,
@@ -120,6 +123,25 @@ class TestPolicyTeleopSource:
         source.update(observation, {}, 0)
 
         teleop.action_queue.follow_follower.assert_not_called()
+        teleop.action_queue.set_leader_torque.assert_called_once_with(enabled=False)
+
+    def test_leader_tracking_restores_torque_when_policy_resumes(self) -> None:
+        source, _policy, teleop = _source(
+            policy=np.array([10.0]), teleop=np.array([1.0]), stable_duration_s=0.0, leader_follows_follower=True
+        )
+        keyboard = source._keyboard
+        keyboard.read_key.side_effect = ["t", "t", "t"]
+        observation = FakeRobotObservation(joint_positions=np.array([1.0]))
+        source.connect(bus=MagicMock(), session_id="session")
+
+        source.update(observation, {}, 0)
+        source.update(observation, {}, 1)
+        source.update(observation, {}, 2)
+
+        assert teleop.action_queue.set_leader_torque.call_args_list == [
+            ((), {"enabled": False}),
+            ((), {"enabled": True}),
+        ]
 
     def test_alignment_must_remain_within_tolerance_for_full_duration(self) -> None:
         source, policy, _teleop = _source(

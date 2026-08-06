@@ -90,7 +90,9 @@ audio feedback is not desired.
 Set `leader_follows_follower=True` only for an actuated, same-morphology
 leader that accepts position commands. It commands the leader to follow the
 follower only during policy control, then releases it as soon as teleop is
-armed. Passive `SO101(role="leader")` hardware cannot use this option.
+armed by disabling leader torque. It restores torque when policy control
+resumes. Passive `SO101(role="leader")` hardware cannot use this option;
+configure a tracking SO-101 leader with `role="follower"` instead.
 ```
 
 ## `Execution`

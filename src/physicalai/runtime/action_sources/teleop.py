@@ -77,6 +77,22 @@ class TeleopSource(ActionSource):
         """
         self._leader.send_action(joint_positions, goal_time=goal_time)
 
+    def set_leader_torque(self, *, enabled: bool) -> None:
+        """Enable or disable torque on a command-capable leader.
+
+        This optional operation is required when a leader switches between
+        position tracking and manual teleoperation. It is supported by SO-101
+        but is not part of the general :class:`Robot` protocol.
+
+        Raises:
+            TypeError: If the configured leader cannot control torque.
+        """
+        set_torque = getattr(self._leader, "set_torque", None)
+        if not callable(set_torque):
+            msg = "Leader does not support torque control required for leader tracking"
+            raise TypeError(msg)
+        set_torque(enabled=enabled)
+
     def disconnect(self) -> None:
         """Disconnect leader if we connected it."""
         if self._leader_owned:

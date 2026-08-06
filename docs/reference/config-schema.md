@@ -93,7 +93,9 @@ action_source:
 ```
 
 `leader_follows_follower` requires a command-capable, same-morphology leader.
-Do not enable it with passive `SO101(role: leader)` hardware.
+For SO-101 use `role: follower`; the source disables its torque while teleop is
+armed and restores it when policy resumes. Do not use passive `SO101(role:
+leader)` hardware.
 
 ## Manifest ComponentSpec
 

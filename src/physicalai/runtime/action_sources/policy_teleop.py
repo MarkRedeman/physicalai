@@ -314,6 +314,11 @@ class PolicyTeleopSource(ActionSource):
             self._within_tolerance_since = None
 
     def _set_mode(self, mode: ActionMode) -> None:
+        if self._leader_follows_follower:
+            if mode is ActionMode.ARMING:
+                self._teleop.set_leader_torque(enabled=False)
+            elif mode is ActionMode.POLICY:
+                self._teleop.set_leader_torque(enabled=True)
         self._mode = mode
         if self._audio_cues:
             self._audio.play(_AUDIO_CUES[mode])
