@@ -200,6 +200,27 @@ class TestPolicyTeleopSource:
             (("Policy enabled.",),),
         ]
 
+    def test_prints_mode_on_connect_and_each_transition(self, capsys: pytest.CaptureFixture[str]) -> None:
+        source, _policy, _teleop = _source(
+            policy=np.array([10.0]), teleop=np.array([1.0]), stable_duration_s=0.0
+        )
+        keyboard = source._keyboard
+        keyboard.read_key.side_effect = ["t", "t", "t"]
+        observation = FakeRobotObservation(joint_positions=np.array([1.0]))
+
+        source.connect(bus=MagicMock(), session_id="session")
+        source.update(observation, {}, 0)
+        source.update(observation, {}, 1)
+        source.update(observation, {}, 2)
+
+        assert capsys.readouterr().out.splitlines() == [
+            "[physicalai] Policy active. Press 't' to arm teleop.",
+            "[physicalai] Teleop armed. Align leader with follower.",
+            "[physicalai] Leader aligned. Follower holding. Press 't' to enable teleop.",
+            "[physicalai] Teleop active. Press 't' to resume policy.",
+            "[physicalai] Policy active. Press 't' to arm teleop.",
+        ]
+
     def test_can_disable_audio_cues(self) -> None:
         source, _policy, _teleop = _source(
             policy=np.array([10.0]), teleop=np.array([1.0]), stable_duration_s=0.0, audio_cues=False

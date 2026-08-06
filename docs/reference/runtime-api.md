@@ -85,7 +85,8 @@ follower then holds position until a second press activates teleop. A final
 press returns to policy and discards queued policy actions generated during the
 intervention. It announces each transition with `espeak` and `aplay` by
 default; set `audio_cues=False` if those Linux utilities are unavailable or
-audio feedback is not desired.
+audio feedback is not desired. It also prints the active mode and next key
+action in the terminal on startup and every transition.
 
 Set `leader_follows_follower=True` only for an actuated, same-morphology
 leader that accepts position commands. It commands the leader to follow the

@@ -146,6 +146,13 @@ _AUDIO_CUES = {
     ActionMode.POLICY: "Policy enabled.",
 }
 
+_TERMINAL_CUES = {
+    ActionMode.POLICY: "Policy active. Press 't' to arm teleop.",
+    ActionMode.ARMING: "Teleop armed. Align leader with follower.",
+    ActionMode.HOLD: "Leader aligned. Follower holding. Press 't' to enable teleop.",
+    ActionMode.TELEOP: "Teleop active. Press 't' to resume policy.",
+}
+
 
 @export_config(class_path="physicalai.runtime.PolicyTeleopSource")
 class PolicyTeleopSource(ActionSource):
@@ -239,6 +246,7 @@ class PolicyTeleopSource(ActionSource):
         try:
             self._teleop.connect(bus=bus, session_id=session_id)
             self._keyboard.enable()
+            self._print_mode()
         except Exception:
             self._policy.disconnect()
             raise
@@ -320,8 +328,12 @@ class PolicyTeleopSource(ActionSource):
             elif mode is ActionMode.POLICY:
                 self._teleop.set_leader_torque(enabled=True)
         self._mode = mode
+        self._print_mode()
         if self._audio_cues:
             self._audio.play(_AUDIO_CUES[mode])
+
+    def _print_mode(self) -> None:
+        print(f"[physicalai] {_TERMINAL_CUES[self._mode]}", flush=True)  # ruff: ignore[print]
 
     def _emit_mode(self, step: int) -> None:
         if self._bus is not None:

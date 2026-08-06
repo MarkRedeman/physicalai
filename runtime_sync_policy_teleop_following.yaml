@@ -35,7 +35,7 @@ init_args:
               calibration: /home/intel/Downloads/Leader-calibration.json
               role: follower
       position_tolerance: 0.05
-      stable_duration_s: 0.25
+      stable_duration_s: 1.0
       toggle_key: t
       audio_cues: true
       leader_follows_follower: true
