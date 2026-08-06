@@ -1,6 +1,6 @@
 # Runtime
 
-`RobotRuntime` runs the control loop on robot hardware. It owns hardware I/O, the callback lifecycle, and timing — while a required, pluggable `action_source` owns the actual decision of what action to send each tick. `PolicySource` wraps a trained policy (model + execution strategy + action queue); `TeleopSource` reads a leader arm; custom logic can implement the `ActionSource` protocol directly.
+`RobotRuntime` runs the control loop on robot hardware. It owns hardware I/O, the callback lifecycle, and timing — while a required, pluggable `action_source` owns the actual decision of what action to send each tick. `PolicySource` wraps a trained policy (model + execution strategy + action queue); `TeleopSource` reads a leader arm; `PolicyTeleopSource` provides a guarded keyboard handoff between both; custom logic can implement the `ActionSource` protocol directly.
 
 ```python
 runtime = RobotRuntime(
@@ -52,7 +52,13 @@ The exact observation structure and merging strategy may change as the API stabi
 
 ## Product Workflows
 
-HIL, recording, highlight, and DAgger should be composed through callbacks until they justify reusable runtime primitives.
+`PolicyTeleopSource` supports DAgger-style interventions without stopping model
+execution. Press `t` to arm teleop, align the leader with the follower, and
+wait for the configured stable period. The follower holds position after the
+alignment gate until a second `t` engages teleop; press `t` again to return to
+policy. The source exposes its `mode` and emits it as the `action_mode` metric
+(`policy=0`, `arming=1`, `hold=2`, `teleop=3`) so a future recorder can label
+intervention segments.
 
 ```python
 class HILCallback:

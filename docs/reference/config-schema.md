@@ -57,6 +57,38 @@ run:
 exported `RobotRuntime` ComponentConfig whose top-level `class_path` is
 `physicalai.runtime.RobotRuntime`.
 
+## Policy Teleop Handoff
+
+Use `physicalai.runtime.PolicyTeleopSource` to collect assisted demonstrations
+with a policy and leader arm. Its `policy` and `teleop` arguments are nested
+components. The default `t` key first arms teleop, then engages it after the
+leader has remained within `position_tolerance` of the follower for
+`stable_duration_s`; a final press returns to policy control.
+
+```yaml
+action_source:
+  class_path: physicalai.runtime.PolicyTeleopSource
+  init_args:
+    policy:
+      class_path: physicalai.runtime.PolicySource
+      init_args:
+        model:
+          class_path: physicalai.inference.InferenceModel
+          init_args:
+            export_dir: ./policy-export
+    teleop:
+      class_path: physicalai.runtime.TeleopSource
+      init_args:
+        leader:
+          class_path: physicalai.robot.SO101
+          init_args:
+            port: /dev/ttyACM1
+            role: leader
+    position_tolerance: 0.05
+    stable_duration_s: 0.25
+    toggle_key: t
+```
+
 ## Manifest ComponentSpec
 
 Inference manifests retain their separate `ComponentSpec` compatibility

@@ -302,6 +302,41 @@ class TestTeleopSourceComponentConfig:
 
 
 # ---------------------------------------------------------------------------
+# PolicyTeleopSource
+# ---------------------------------------------------------------------------
+
+
+class TestPolicyTeleopSourceComponentConfig:
+    def test_nested_graph(self, inference_model: Any, _patch_adapter: MagicMock) -> None:
+        from physicalai.robot import SO101
+        from physicalai.runtime import PolicySource, PolicyTeleopSource, TeleopSource
+
+        calibration = {
+            "shoulder_pan": {"id": 1, "drive_mode": 0, "homing_offset": 2048, "range_min": 707, "range_max": 3439},
+            "shoulder_lift": {"id": 2, "drive_mode": 1, "homing_offset": 1024, "range_min": 669, "range_max": 3292},
+            "elbow_flex": {"id": 3, "drive_mode": 0, "homing_offset": 2048, "range_min": 846, "range_max": 3069},
+            "wrist_flex": {"id": 4, "drive_mode": 0, "homing_offset": 2048, "range_min": 956, "range_max": 3311},
+            "wrist_roll": {"id": 5, "drive_mode": 0, "homing_offset": 2048, "range_min": 59, "range_max": 3946},
+            "gripper": {"id": 6, "drive_mode": 0, "homing_offset": 2048, "range_min": 2026, "range_max": 3074},
+        }
+        source = PolicyTeleopSource(
+            policy=PolicySource(model=inference_model, task="pick cube"),
+            teleop=TeleopSource(leader=SO101(port="/dev/ttyUSB0", calibration=calibration, role="leader")),
+            position_tolerance=0.1,
+            stable_duration_s=0.5,
+            toggle_key="i",
+        )
+
+        wire = _assert_construction_round_trip(source)
+        assert wire["class_path"] == "physicalai.runtime.PolicyTeleopSource"
+        assert wire["init_args"]["policy"]["class_path"] == "physicalai.runtime.PolicySource"
+        assert wire["init_args"]["teleop"]["class_path"] == "physicalai.runtime.TeleopSource"
+        assert wire["init_args"]["position_tolerance"] == 0.1
+        assert wire["init_args"]["stable_duration_s"] == 0.5
+        assert wire["init_args"]["toggle_key"] == "i"
+
+
+# ---------------------------------------------------------------------------
 # Callbacks
 # ---------------------------------------------------------------------------
 

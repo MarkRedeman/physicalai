@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from physicalai.runtime.action_sources.base import ActionSource
 from physicalai.runtime.action_sources.policy import PolicySource
+from physicalai.runtime.action_sources.policy_teleop import ActionMode, PolicyTeleopSource
 from physicalai.runtime.action_sources.teleop import TeleopSource
 
-__all__ = ["ActionSource", "PolicySource", "TeleopSource"]
+__all__ = ["ActionMode", "ActionSource", "PolicySource", "PolicyTeleopSource", "TeleopSource"]

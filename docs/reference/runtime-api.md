@@ -44,10 +44,11 @@ class ActionSource(Protocol):
 
 The action-source implementations shipped today are listed below.
 
-| Class          | Purpose                                                                |
-| -------------- | ---------------------------------------------------------------------- |
-| `PolicySource` | runs a trained model through an `Execution` strategy + `ActionQueue`   |
-| `TeleopSource` | reads a leader arm and forwards its observation as the follower action |
+| Class                | Purpose                                                                |
+| -------------------- | ---------------------------------------------------------------------- |
+| `PolicySource`       | runs a trained model through an `Execution` strategy + `ActionQueue`   |
+| `TeleopSource`       | reads a leader arm and forwards its observation as the follower action |
+| `PolicyTeleopSource` | guarded keyboard handoff between a policy and teleoperator             |
 
 ```python
 PolicySource(
@@ -63,6 +64,23 @@ TeleopSource(
     *,
     to_action: Callable[[RobotObservation], np.ndarray] | None = None,
 )
+
+PolicyTeleopSource(
+    policy: PolicySource,
+    teleop: TeleopSource,
+    *,
+    position_tolerance: float = 0.05,
+    stable_duration_s: float = 0.25,
+    toggle_key: str = "t",
+)
+```
+
+`PolicyTeleopSource` keeps policy inference active throughout an intervention.
+Press `t` to arm teleop; policy remains active until every mapped leader joint
+is within `position_tolerance` of the follower for `stable_duration_s`. The
+follower then holds position until a second press activates teleop. A final
+press returns to policy and discards queued policy actions generated during the
+intervention.
 ```
 
 ## `Execution`

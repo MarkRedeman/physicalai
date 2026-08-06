@@ -5,7 +5,7 @@
 
 Public API::
 
-    from physicalai.runtime import ActionSource, PolicySource, TeleopSource
+    from physicalai.runtime import ActionSource, PolicySource, PolicyTeleopSource, TeleopSource
     from physicalai.runtime import RobotRuntime, RuntimeCallback
     from physicalai.runtime import SyncExecution, AsyncExecution, Execution, WorkerDiedError
     from physicalai.runtime import ActionQueue, ChunkedActionQueue
@@ -14,7 +14,7 @@ Public API::
     from physicalai.runtime import ConsoleCallback, JsonlCallback, AsyncCallback, RerunCallback
 """
 
-from physicalai.runtime.action_sources import ActionSource, PolicySource, TeleopSource
+from physicalai.runtime.action_sources import ActionMode, ActionSource, PolicySource, PolicyTeleopSource, TeleopSource
 from physicalai.runtime.callbacks import (
     AsyncCallback,
     ConsoleCallback,
@@ -38,6 +38,7 @@ from physicalai.runtime.smoothers import ChunkSmoother, LerpSmoother, ReplaceSmo
 
 __all__ = [
     "ActionQueue",
+    "ActionMode",
     "ActionSource",
     "AsyncCallback",
     "AsyncExecution",
@@ -52,6 +53,7 @@ __all__ = [
     "LowPassFilterCallback",
     "MetricsEvent",
     "PolicySource",
+    "PolicyTeleopSource",
     "RTCActionQueue",
     "RTCExecution",
     "ReplaceSmoother",
