@@ -88,7 +88,12 @@ action_source:
     stable_duration_s: 0.25
     toggle_key: t
     audio_cues: true
+    leader_follows_follower: false
+    leader_goal_time: 0.1
 ```
+
+`leader_follows_follower` requires a command-capable, same-morphology leader.
+Do not enable it with passive `SO101(role: leader)` hardware.
 
 ## Manifest ComponentSpec
 

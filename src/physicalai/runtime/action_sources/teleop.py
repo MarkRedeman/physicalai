@@ -38,7 +38,7 @@ class TeleopSource(ActionSource):
             ``obs.joint_positions`` (identity for same-morphology leader/follower).
     """
 
-    def __init__(  # noqa: D107
+    def __init__(  # ruff: ignore[undocumented-public-init]
         self,
         leader: Robot,
         *,
@@ -48,19 +48,34 @@ class TeleopSource(ActionSource):
         self._to_action = to_action or (lambda obs: obs.joint_positions)
         self._leader_owned = False
 
-    def connect(self, *, bus: _CallbackBus, session_id: str) -> None:  # noqa: ARG002
+    def connect(self, *, bus: _CallbackBus, session_id: str) -> None:  # ruff: ignore[unused-method-argument]
         """Connect leader if not already connected."""
         if not self._leader.is_connected():
             self._leader.connect()
             self._leader_owned = True
 
-    def update(self, robot_state: RobotObservation, camera_frames: Mapping[str, Frame], step: int) -> np.ndarray:  # noqa: ARG002
+    def update(self, _robot_state: RobotObservation, _camera_frames: Mapping[str, Frame], _step: int) -> np.ndarray:
         """Read the leader arm and return the action for the follower.
 
         Returns:
             Action array for the follower robot.
         """
         return self._to_action(self._leader.get_observation())
+
+    def follow_follower(self, joint_positions: np.ndarray, *, goal_time: float = 0.1) -> None:
+        """Command an actuated leader to match the follower's joint positions.
+
+        This is intended for same-morphology, command-capable leader devices.
+        Passive leaders, including ``SO101(role="leader")``, cannot use this
+        method because their torque is intentionally disabled.
+
+        Args:
+            joint_positions: Follower joint positions in the leader's command
+                order and units.
+            goal_time: Requested time in seconds for the leader to reach the
+                target.
+        """
+        self._leader.send_action(joint_positions, goal_time=goal_time)
 
     def disconnect(self) -> None:
         """Disconnect leader if we connected it."""

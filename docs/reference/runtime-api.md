@@ -73,6 +73,8 @@ PolicyTeleopSource(
     stable_duration_s: float = 0.25,
     toggle_key: str = "t",
     audio_cues: bool = True,
+    leader_follows_follower: bool = False,
+    leader_goal_time: float = 0.1,
 )
 ```
 
@@ -84,6 +86,11 @@ press returns to policy and discards queued policy actions generated during the
 intervention. It announces each transition with `espeak` and `aplay` by
 default; set `audio_cues=False` if those Linux utilities are unavailable or
 audio feedback is not desired.
+
+Set `leader_follows_follower=True` only for an actuated, same-morphology
+leader that accepts position commands. It commands the leader to follow the
+follower only during policy control, then releases it as soon as teleop is
+armed. Passive `SO101(role="leader")` hardware cannot use this option.
 ```
 
 ## `Execution`

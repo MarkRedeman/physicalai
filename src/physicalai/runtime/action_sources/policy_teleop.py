@@ -171,6 +171,9 @@ class PolicyTeleopSource(ActionSource):
         toggle_key: Single keyboard key used to arm, engage, and exit teleop.
         audio_cues: Whether to announce state changes through ``espeak`` and
             ``aplay``. Enabled by default.
+        leader_follows_follower: Whether an actuated, same-morphology leader
+            should track follower positions while policy control is active.
+        leader_goal_time: Requested seconds for leader tracking commands.
     """
 
     def __init__(
@@ -182,6 +185,8 @@ class PolicyTeleopSource(ActionSource):
         stable_duration_s: float = 0.25,
         toggle_key: str = "t",
         audio_cues: bool = True,
+        leader_follows_follower: bool = False,
+        leader_goal_time: float = 0.1,
     ) -> None:
         """Initialize the policy/teleoperation handoff source.
 
@@ -198,6 +203,9 @@ class PolicyTeleopSource(ActionSource):
         if len(toggle_key) != 1:
             msg = "toggle_key must be exactly one character"
             raise ValueError(msg)
+        if leader_goal_time <= 0:
+            msg = f"leader_goal_time must be positive, got {leader_goal_time}"
+            raise ValueError(msg)
 
         self._policy = policy
         self._teleop = teleop
@@ -205,6 +213,8 @@ class PolicyTeleopSource(ActionSource):
         self._stable_duration_s = stable_duration_s
         self._toggle_key = toggle_key
         self._audio_cues = audio_cues
+        self._leader_follows_follower = leader_follows_follower
+        self._leader_goal_time = leader_goal_time
         self._keyboard = _TerminalKeyReader()
         self._audio = _AudioCuePlayer()
         self._mode = ActionMode.POLICY
@@ -251,6 +261,8 @@ class PolicyTeleopSource(ActionSource):
         policy_action = self._policy.update(robot_state, camera_frames, step)
 
         if self._mode is ActionMode.POLICY:
+            if self._leader_follows_follower:
+                self._teleop.follow_follower(robot_state.joint_positions, goal_time=self._leader_goal_time)
             action = policy_action
         elif self._mode is ActionMode.ARMING:
             action = policy_action

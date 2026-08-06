@@ -326,6 +326,8 @@ class TestPolicyTeleopSourceComponentConfig:
             stable_duration_s=0.5,
             toggle_key="i",
             audio_cues=False,
+            leader_follows_follower=True,
+            leader_goal_time=0.2,
         )
 
         wire = _assert_construction_round_trip(source)
@@ -336,6 +338,8 @@ class TestPolicyTeleopSourceComponentConfig:
         assert wire["init_args"]["stable_duration_s"] == 0.5
         assert wire["init_args"]["toggle_key"] == "i"
         assert wire["init_args"]["audio_cues"] is False
+        assert wire["init_args"]["leader_follows_follower"] is True
+        assert wire["init_args"]["leader_goal_time"] == 0.2
 
 
 # ---------------------------------------------------------------------------

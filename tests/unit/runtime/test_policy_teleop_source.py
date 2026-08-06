@@ -36,9 +36,17 @@ class _Source:
     def disconnect(self) -> None:
         self.disconnected = True
 
+    def follow_follower(self, joint_positions: np.ndarray, *, goal_time: float) -> None:  # noqa: ARG002
+        self.action_queue.follow_follower(joint_positions, goal_time=goal_time)
+
 
 def _source(
-    *, policy: np.ndarray, teleop: np.ndarray, stable_duration_s: float = 0.25, audio_cues: bool = True
+    *,
+    policy: np.ndarray,
+    teleop: np.ndarray,
+    stable_duration_s: float = 0.25,
+    audio_cues: bool = True,
+    leader_follows_follower: bool = False,
 ) -> tuple[PolicyTeleopSource, _Source, _Source]:
     policy_child = _Source(policy)
     teleop_child = _Source(teleop)
@@ -48,6 +56,7 @@ def _source(
         position_tolerance=0.05,
         stable_duration_s=stable_duration_s,
         audio_cues=audio_cues,
+        leader_follows_follower=leader_follows_follower,
     )
     source._keyboard = MagicMock()
     source._audio = MagicMock()
@@ -87,6 +96,30 @@ class TestPolicyTeleopSource:
         assert source.mode is ActionMode.TELEOP
         assert policy.updates == 3
         assert teleop.updates == 3  # Two alignment reads plus active teleop.
+
+    def test_leader_can_follow_follower_during_policy(self) -> None:
+        source, _policy, teleop = _source(
+            policy=np.array([10.0, 11.0]), teleop=np.array([1.0, 2.0]), leader_follows_follower=True
+        )
+        observation = FakeRobotObservation(joint_positions=np.array([3.0, 4.0]))
+        source.connect(bus=MagicMock(), session_id="session")
+
+        source.update(observation, {}, 0)
+
+        teleop.action_queue.follow_follower.assert_called_once_with(observation.joint_positions, goal_time=0.1)
+
+    def test_leader_stops_following_when_teleop_is_armed(self) -> None:
+        source, _policy, teleop = _source(
+            policy=np.array([10.0]), teleop=np.array([1.0]), leader_follows_follower=True
+        )
+        keyboard = source._keyboard
+        keyboard.read_key.return_value = "t"
+        observation = FakeRobotObservation(joint_positions=np.array([1.0]))
+        source.connect(bus=MagicMock(), session_id="session")
+
+        source.update(observation, {}, 0)
+
+        teleop.action_queue.follow_follower.assert_not_called()
 
     def test_alignment_must_remain_within_tolerance_for_full_duration(self) -> None:
         source, policy, _teleop = _source(
@@ -165,6 +198,7 @@ class TestPolicyTeleopSource:
             ({"position_tolerance": -0.1}, "position_tolerance"),
             ({"stable_duration_s": -0.1}, "stable_duration_s"),
             ({"toggle_key": "toggle"}, "toggle_key"),
+            ({"leader_goal_time": 0.0}, "leader_goal_time"),
         ],
     )
     def test_rejects_invalid_configuration(self, kwargs: dict[str, object], message: str) -> None:

@@ -63,6 +63,11 @@ Audio cues are enabled by default and announce when teleop is armed, ready,
 active, and when policy control resumes. Set `audio_cues=False` for systems
 without `espeak` and `aplay`.
 
+For an actuated, same-morphology leader, set `leader_follows_follower=True` to
+keep it aligned with the follower while the policy runs. Tracking stops as soon
+as teleop is armed so the operator can take the leader. This does not work with
+the passive torque-disabled SO-101 leader role.
+
 ```python
 class HILCallback:
     def on_action_ready(self, *, action, step):
