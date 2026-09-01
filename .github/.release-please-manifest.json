@@ -1,4 +1,5 @@
 {
   ".": "0.1.1",
-  "packages/physicalai-studio-plugin": "0.1.0"
+  "packages/physicalai-studio-plugin": "0.1.0",
+  "packages/physicalai-bimanual-so101-plugin": "0.2.3"
 }

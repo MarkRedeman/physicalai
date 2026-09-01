@@ -62,8 +62,8 @@ class RobotUiSectionOptions(TypedDict, total=False):
 
 RobotUiItem = RobotUiInfoItem | RobotUiConnectionItem | RobotUiFieldItem | RobotUiSectionOptions
 RobotPayloadUiOptions = list[RobotUiItem]
-FieldSchemaExtra = TypedDict("FieldSchemaExtra", {"x-physicalai-ui": RobotFieldUiOptions})
-ModelSchemaExtra = TypedDict("ModelSchemaExtra", {"x-physicalai-ui": RobotPayloadUiOptions})
+FieldSchemaExtra = dict[str, Any]
+ModelSchemaExtra = dict[str, Any]
 
 
 def robot_field_ui(options: RobotFieldUiOptions) -> FieldSchemaExtra:

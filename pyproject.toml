@@ -8,6 +8,7 @@ members = ["packages/*"]
 [tool.uv.sources]
 physicalai = { workspace = true }
 physicalai-studio-plugin = { workspace = true }
+physicalai-bimanual-so101-plugin = { workspace = true }
 
 [project]
 name = "physicalai"
