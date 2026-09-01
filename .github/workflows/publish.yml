@@ -57,6 +57,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ fromJSON(needs.release-please.outputs.rp_outputs)[format('{0}--tag_name', matrix.package.path)] }}
+          lfs: true
           persist-credentials: false
           fetch-depth: 0 # needed for hatch-vcs to resolve version from git tags
 
