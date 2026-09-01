@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "physicalai-studio-plugin"
+dynamic = ["version"]
+description = "Plugin SDK for Physical AI Studio robot catalog plugins"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+authors = [{ name = "Intel OpenVINO Toolkit" }]
+dependencies = [
+    "physicalai>=0.1.1",
+    "pydantic>=2.12",
+]
+
+[project.urls]
+Homepage = "https://github.com/openvinotoolkit/physicalai"
+Repository = "https://github.com/openvinotoolkit/physicalai"
+Issues = "https://github.com/openvinotoolkit/physicalai/issues"
+
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.1.0"
+tag-pattern = '^physicalai-studio-plugin-v(?P<version>\d+(?:\.\d+)*)$'
+raw-options = { search_parent_directories = true, git_describe_command = "git describe --dirty --tags --long --match physicalai-studio-plugin-v*" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/physicalai_studio_plugin"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/physicalai_studio_plugin/**",
+    "README.md",
+    "pyproject.toml",
+    "CHANGELOG.md",
+    "LICENSE",
+]
+
+[tool.hatch.build.targets.sdist.force-include]
+"../../LICENSE" = "LICENSE"
+
+[tool.pytest.ini_options]
+addopts = ["--strict-markers", "--strict-config", "-ra"]
+testpaths = ["tests"]
+pythonpath = ["src"]
