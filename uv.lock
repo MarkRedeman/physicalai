@@ -10,6 +10,7 @@ resolution-markers = [
 members = [
     "physicalai",
     "physicalai-bimanual-so101-plugin",
+    "physicalai-rebot-b601-plugin",
     "physicalai-studio-plugin",
 ]
 
@@ -1249,6 +1250,35 @@ wheels = [
 ]
 
 [[package]]
+name = "motorbridge"
+version = "0.5.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/a0/26772e159e4baebd6759fa0fd136c49025b7d047d7f10f82dae2ecddeab5/motorbridge-0.5.2.tar.gz", hash = "sha256:f64fc56d961d829f52635951676a844b4d98845ec2e7408b2ca52d7409e0086f", size = 42647, upload-time = "2026-08-31T06:20:18.072Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dc/0e/1d6e9a04064f17a47df6f2c88d51d8bdbc77cd36c29ed72cead9d1ab458b/motorbridge-0.5.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:2651c86c8c50525cf82dcf64bb1ab52f0ce474caf42b17d15349d34d3eec8b09", size = 1241684, upload-time = "2026-08-31T06:20:05.1Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/8b/fb7b67f60365beaed94a43475a193b4b55a9865e2232b2b5815e12b0bac0/motorbridge-0.5.2-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2ef6947ba1f1bbcaecac6ecce2522a563a7da8b9fa598827a4f128e41fd3c271", size = 1336584, upload-time = "2026-08-31T06:20:06.648Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/50/200d35e7be71c5d3f3f6218dc85eae5544d53e3a15f4369248ca16f36c20/motorbridge-0.5.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1b1fd7d7b28b9e7984ff39991523314465615a48b6e0da6dabd4bcf02cdc94d8", size = 1355869, upload-time = "2026-08-31T06:20:07.976Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/a6/906429cef67ce18bdcdf24383b3931da4abe86c88bbc3ea36178d3f7c378/motorbridge-0.5.2-cp312-cp312-win_amd64.whl", hash = "sha256:ae379ca8bf84f834c89f4c4833ee83b47d32fa5db13f42d4339b2d49e8ee5011", size = 1042423, upload-time = "2026-08-31T06:20:09.685Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/1c/59e656b46e921be2d0be6084cb04ddde9c74e9af8991fc1cb145cafb9bce/motorbridge-0.5.2-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:4e89710a86bcff154b972916664fbd5253d5ab3de67b966b5a3dcfbec863df03", size = 1241684, upload-time = "2026-08-31T06:20:11.012Z" },
+    { url = "https://files.pythonhosted.org/packages/a3/cf/3b7ab2fe35bfc11d18f896cb5c5d86da707331b64ecf1101ce85e38076f3/motorbridge-0.5.2-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:53d98a66432d2ff6608ba4281487acc0695c8ad7dbae57a4a23fcb6e9a5dbfc6", size = 1336586, upload-time = "2026-08-31T06:20:12.569Z" },
+    { url = "https://files.pythonhosted.org/packages/94/af/29583f1a411cfd3ac75a8b3dc95d36162852ff7d335f47cc05f2593157fb/motorbridge-0.5.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8698a03f5a322d0dba1e3a00238f375f175b2724c9510803fd908ce9c88d8c7e", size = 1355868, upload-time = "2026-08-31T06:20:14.025Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/08/693986ac3c72f7f5adaa0326b33696f9edd1494ddc9aca9bdae9ee6fbb7a/motorbridge-0.5.2-cp313-cp313-win_amd64.whl", hash = "sha256:a5d9113902f8b60ff013f3152528dfa537e5ef78ee13690faccd294d5132701d", size = 1042423, upload-time = "2026-08-31T06:20:15.448Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/86/0af5478c017d5686f5a87e421a30f39074b42eb4e956f2d733fd6c20b32f/motorbridge-0.5.2-cp314-cp314-win_amd64.whl", hash = "sha256:eb91173a3cb8a79613991e3b138dfba40770d0c23e4fe515af2042c0db9c4320", size = 1079501, upload-time = "2026-08-31T06:20:16.845Z" },
+]
+
+[[package]]
+name = "motorbridge-smart-servo"
+version = "0.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e6/56/45af87189dc49abbe46157b792b7c71f502a5f819f04e7485de0cfa52d9b/motorbridge_smart_servo-0.0.4.tar.gz", hash = "sha256:fb65f3f6e765e6b1915071c255caaf112fad3796fa1761aeee0132d15b8a0989", size = 20415, upload-time = "2026-05-08T09:24:57.563Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e9/ee/bec4b3acf55cd18e7db83a6d951caccf699533dbd038c1f0b5f2d16d5208/motorbridge_smart_servo-0.0.4-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:8bc1f034fa9f96e23229a834db6e7cfe1368dba7b9a2a6f6dbd316448c4390dc", size = 304384, upload-time = "2026-05-08T09:24:52.619Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/d2/71c87063b826433553ce8869b99df3e4f191b107710dd5c905e637512b10/motorbridge_smart_servo-0.0.4-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:348cef6a647e5c7f9cc8e8ce1f3c806af4522e1087172bac2f8a1a0daa3592b6", size = 345668, upload-time = "2026-05-08T09:24:53.735Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/6b/e65e7227a510236c6334cf054c501d3de2cbd463f4c594e42c6e965d5143/motorbridge_smart_servo-0.0.4-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8c1982643c496c9f425fa9238f9a92ba601d77f4f2279df68c6868e7b997cbe1", size = 348123, upload-time = "2026-05-08T09:24:55.191Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/fa/539ea123a5660c22c5e5cdad62d7bc5e931c816a0ffd402ae6e4623ab45b/motorbridge_smart_servo-0.0.4-cp39-abi3-win_amd64.whl", hash = "sha256:ea3baa9ba25bcec5541f3d86d73a3406ba2fcffe5dbf900c22e058638fc31ab0", size = 194130, upload-time = "2026-05-08T09:24:56.369Z" },
+]
+
+[[package]]
 name = "msgpack"
 version = "1.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1752,6 +1782,37 @@ requires-dist = [
     { name = "pyserial", specifier = ">=3.5" },
     { name = "pytest", marker = "extra == 'tests'" },
     { name = "pytest-anyio", marker = "extra == 'tests'" },
+]
+provides-extras = ["tests"]
+
+[[package]]
+name = "physicalai-rebot-b601-plugin"
+source = { editable = "packages/physicalai-rebot-b601-plugin" }
+dependencies = [
+    { name = "loguru" },
+    { name = "motorbridge" },
+    { name = "motorbridge-smart-servo" },
+    { name = "numpy" },
+    { name = "physicalai" },
+    { name = "physicalai-studio-plugin" },
+    { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+tests = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "loguru", specifier = ">=0.7" },
+    { name = "motorbridge", specifier = ">=0.4.4" },
+    { name = "motorbridge-smart-servo", specifier = ">=0.0.4" },
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "physicalai", editable = "." },
+    { name = "physicalai-studio-plugin", editable = "packages/physicalai-studio-plugin" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pytest", marker = "extra == 'tests'" },
 ]
 provides-extras = ["tests"]
 

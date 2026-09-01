@@ -9,6 +9,7 @@ members = ["packages/*"]
 physicalai = { workspace = true }
 physicalai-studio-plugin = { workspace = true }
 physicalai-bimanual-so101-plugin = { workspace = true }
+physicalai-rebot-b601-plugin = { workspace = true }
 
 [project]
 name = "physicalai"
