@@ -36,6 +36,33 @@ and each migrated plugin from this checkout. The lockfile now includes the
 dependencies needed by all workspace members, including the substantial
 LeRobot/Torch dependency graph.
 
+## Why Packages Rather Than `src`
+
+The root `src/physicalai` directory remains the source tree for the single
+`physicalai` runtime distribution. The migrated projects are installed and
+released as four separate distributions, so each needs its own package root,
+build configuration, version, README, changelog, and optional dependencies.
+
+Placing their import modules directly under the root `src/` would cause the
+root build configuration to ship them in the `physicalai` wheel. That would
+remove independent installation and release boundaries: installing
+`physicalai-bimanual-so101-plugin`, for example, would no longer be distinct
+from installing `physicalai`.
+
+The `packages/` layout keeps those boundaries explicit while still enabling
+single-checkout development through uv workspaces. It also lets each plugin:
+
+- Depend on hardware-specific libraries without making them runtime
+  dependencies for every `physicalai` user.
+- Retain its existing PyPI distribution name and Studio catalog entry point.
+- Carry URDFs and meshes using package-specific build inclusion rules.
+- Receive an independent Release Please version, tag, changelog, build, smoke
+  test, and PyPI publication.
+
+This is the same multi-distribution layout used by the original plugins
+repository, now managed from the runtime repository rather than a separate
+checkout.
+
 ## Release Configuration
 
 Release Please now has one component for the runtime and one for each migrated
