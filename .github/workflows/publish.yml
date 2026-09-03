@@ -16,8 +16,18 @@ jobs:
       contents: write # Needed to create releases and tags
       pull-requests: write # Needed to create release PRs
     outputs:
-      release_created: ${{ steps.release-please.outputs.release_created }}
+      packages: ${{ steps.packages.outputs.matrix }}
+      rp_outputs: ${{ toJSON(steps.release-please.outputs) }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: packages
+        run: |
+          echo "matrix=$(jq -c '[.packages | to_entries[] | {name: .value["package-name"], path: .key}]' .github/release-please-config.json)" >> "$GITHUB_OUTPUT"
+
       - name: Run release-please
         id: release-please
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
@@ -27,59 +37,79 @@ jobs:
           target-branch: main
 
   build:
+    name: Build ${{ matrix.package.name }}
     runs-on: ubuntu-latest
     needs: release-please
-    if: |
-      always() && (
-        (needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true') ||
-        needs.release-please.result == 'skipped'
-      )
+    strategy:
+      matrix:
+        package: ${{ fromJSON(needs.release-please.outputs.packages) }}
     permissions:
       contents: read
+    env:
+      RELEASE_CREATED: ${{ fromJSON(needs.release-please.outputs.rp_outputs)[format('{0}--release_created', matrix.package.path)] }}
     steps:
+      - name: Skip when no release was created for this package
+        if: ${{ env.RELEASE_CREATED != 'true' }}
+        run: exit 0
+
       - name: Checkout repository
+        if: ${{ env.RELEASE_CREATED == 'true' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ fromJSON(needs.release-please.outputs.rp_outputs)[format('{0}--tag_name', matrix.package.path)] }}
+          lfs: true
           persist-credentials: false
           fetch-depth: 0 # needed for hatch-vcs to resolve version from git tags
 
       - name: Set up Python
+        if: ${{ env.RELEASE_CREATED == 'true' }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
       - name: Build distributions
+        if: ${{ env.RELEASE_CREATED == 'true' }}
+        working-directory: ${{ matrix.package.path }}
         run: python -m pip install build==1.5.0 twine==6.2.0 && python -m build && python -m twine check dist/*
 
       - name: Upload distributions
+        if: ${{ env.RELEASE_CREATED == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: python-package-distributions
-          path: dist/
+          name: ${{ matrix.package.name }}-dist
+          path: ${{ matrix.package.path }}/dist/
 
   smoke-test:
+    name: Smoke test ${{ matrix.package.name }}
     runs-on: ubuntu-latest
     needs: [release-please, build]
-    if: |
-      always() && needs.build.result == 'success' && (
-        (needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true') ||
-        needs.release-please.result == 'skipped'
-      )
+    strategy:
+      matrix:
+        package: ${{ fromJSON(needs.release-please.outputs.packages) }}
     permissions:
       contents: read
+    env:
+      RELEASE_CREATED: ${{ fromJSON(needs.release-please.outputs.rp_outputs)[format('{0}--release_created', matrix.package.path)] }}
     steps:
+      - name: Skip when no release was created for this package
+        if: ${{ env.RELEASE_CREATED != 'true' }}
+        run: exit 0
+
       - name: Set up Python
+        if: ${{ env.RELEASE_CREATED == 'true' }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
       - name: Download distributions
+        if: ${{ env.RELEASE_CREATED == 'true' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: python-package-distributions
+          name: ${{ matrix.package.name }}-dist
           path: dist/
 
       - name: Verify clean wheel install
+        if: ${{ env.RELEASE_CREATED == 'true' }}
         run: |
           python -m venv .venv-smoke
           . .venv-smoke/bin/activate
@@ -89,32 +119,33 @@ jobs:
           python - <<'PY'
           import importlib.metadata as metadata
 
-          import physicalai.capture
-          import physicalai.inference
-          import physicalai.robot
-          import physicalai.runtime
-
-          print(metadata.version("physicalai"))
+          import_name = "${{ matrix.package.name }}".replace("-", "_")
+          __import__(import_name)
+          print(metadata.version("${{ matrix.package.name }}"))
           PY
 
   publish:
+    name: Publish ${{ matrix.package.name }}
     runs-on: ubuntu-latest
     needs: [release-please, smoke-test]
-    if: |
-      always() && needs.smoke-test.result == 'success' &&
-      needs.release-please.result == 'success' &&
-      needs.release-please.outputs.release_created == 'true'
+    strategy:
+      matrix:
+        package: ${{ fromJSON(needs.release-please.outputs.packages) }}
     permissions:
       id-token: write
     environment:
       name: pypi
-      url: https://pypi.org/p/physicalai
+      url: https://pypi.org/p/${{ matrix.package.name }}
+    env:
+      RELEASE_CREATED: ${{ fromJSON(needs.release-please.outputs.rp_outputs)[format('{0}--release_created', matrix.package.path)] }}
     steps:
       - name: Download distributions
+        if: ${{ env.RELEASE_CREATED == 'true' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: python-package-distributions
+          name: ${{ matrix.package.name }}-dist
           path: dist/
 
       - name: Publish to PyPI
+        if: ${{ env.RELEASE_CREATED == 'true' }}
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

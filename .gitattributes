@@ -1,0 +1,4 @@
+packages/physicalai-rebot-b601-plugin/urdf/**/*.urdf text eol=lf
+packages/physicalai-rebot-b601-plugin/urdf/** whitespace=-trailing-space,-cr-at-eol
+*.stl filter=lfs diff=lfs merge=lfs -text
+*.STL filter=lfs diff=lfs merge=lfs -text
