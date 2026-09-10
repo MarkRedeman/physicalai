@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
 """Public API for the Physical AI Studio plugin."""
 
 from .assets import RobotAsset

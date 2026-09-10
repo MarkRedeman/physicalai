@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
 """Typed JSON Schema extensions understood by the Studio robot form."""
 
 from __future__ import annotations
@@ -112,21 +115,25 @@ ModelSchemaExtra = TypedDict("ModelSchemaExtra", {"x-physicalai-ui": RobotPayloa
 
 
 def robot_field_ui(options: RobotFieldUiOptions) -> FieldSchemaExtra:
-    """Create typed ``Field(json_schema_extra=...)`` metadata."""
+    """Create typed ``Field(json_schema_extra=...)`` metadata.
+
+    Returns:
+        JSON Schema metadata for a payload field.
+    """
     return {"x-physicalai-ui": options}
 
 
 def robot_payload_ui(items: RobotPayloadUiOptions) -> ModelSchemaExtra:
-    """Create typed ``ConfigDict(json_schema_extra=...)`` metadata."""
+    """Create typed ``ConfigDict(json_schema_extra=...)`` metadata.
+
+    Returns:
+        JSON Schema metadata for a payload model.
+    """
     return {"x-physicalai-ui": items}
 
 
 def validate_robot_payload_ui(payload_model: type[BaseModel]) -> None:  # noqa: C901, PLR0915
-    """Validate Studio UI metadata emitted by a robot payload model.
-
-    Raises:
-        ValueError: If metadata does not conform to the recursive item-list contract.
-    """
+    """Validate Studio UI metadata emitted by a robot payload model."""
     schema = payload_model.model_json_schema()
     definitions = schema.get("$defs", {})
 
@@ -157,7 +164,7 @@ def validate_robot_payload_ui(payload_model: type[BaseModel]) -> None:  # noqa: 
             return
 
         description = info.get("description")
-        if not isinstance(description, str) or description == "":
+        if not isinstance(description, str) or not description:
             error(path, "info.description must be a non-empty string")
 
         title = info.get("title")
@@ -274,7 +281,7 @@ def validate_robot_payload_ui(payload_model: type[BaseModel]) -> None:  # noqa: 
 
     visited: set[int] = set()
 
-    def validate_model_schema(model_schema: object, path: str) -> None:
+    def validate_model_schema(model_schema: object, path: str) -> None:  # noqa: PLR0912
         if not isinstance(model_schema, dict) or id(model_schema) in visited:
             return
         visited.add(id(model_schema))
@@ -285,7 +292,7 @@ def validate_robot_payload_ui(payload_model: type[BaseModel]) -> None:  # noqa: 
                 error(f"{path}.x-physicalai-ui", "must be a list of items")
             else:
                 validate_items(ui, properties if isinstance(properties, dict) else {}, f"{path}.x-physicalai-ui")
-        if isinstance(properties, dict):
+        if isinstance(properties, dict):  # noqa: PLR1702
             for field_name, field_schema in properties.items():
                 if isinstance(field_schema, dict):
                     field_ui = field_schema.get("x-physicalai-ui")

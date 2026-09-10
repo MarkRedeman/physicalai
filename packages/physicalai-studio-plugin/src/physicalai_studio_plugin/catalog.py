@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
 """Core plugin catalog protocol and definition types."""
 
 from __future__ import annotations
@@ -6,8 +9,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generic, Literal, Protocol, TypeVar
 
-from physicalai.robot.interface import Robot as PhysicalAIRobot
 from pydantic import BaseModel
+
+from physicalai.robot.interface import Robot as PhysicalAIRobot
 
 from .factory import CatalogRobotFactory
 

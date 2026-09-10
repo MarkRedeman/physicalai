@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
 """Data structures describing robot visualization assets."""
 
 from __future__ import annotations

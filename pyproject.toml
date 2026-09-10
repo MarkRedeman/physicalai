@@ -138,7 +138,7 @@ default-groups = ["dev"]
 target-version = "py311"
 line-length = 120
 preview = true
-include = ["src/**/*.py", "src/**/*.pyi"]
+include = ["src/**/*.py", "src/**/*.pyi", "packages/**/src/**/*.py", "packages/**/src/**/*.pyi"]
 exclude = [
     ".bzr",
     ".direnv",

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
 """Helpers for wiring Studio robots onto the physicalai transport."""
 
 from __future__ import annotations
