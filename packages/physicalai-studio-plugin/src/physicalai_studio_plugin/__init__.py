@@ -16,6 +16,7 @@ from .transport import shared_robot_name
 from .ui_schema import (
     RobotFieldUiOptions,
     RobotPayloadUiOptions,
+    RobotUiCalibrationItem,
     RobotUiConnectionBinding,
     RobotUiConnectionItem,
     RobotUiFieldItem,
@@ -41,6 +42,7 @@ __all__ = [
     "RobotFieldUiOptions",
     "RobotPayloadUiOptions",
     "RobotProbe",
+    "RobotUiCalibrationItem",
     "RobotUiConnectionBinding",
     "RobotUiConnectionItem",
     "RobotUiFieldItem",

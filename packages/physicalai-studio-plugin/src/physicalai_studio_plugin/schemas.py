@@ -8,5 +8,5 @@ from pydantic import BaseModel
 class SerialPortInfo(BaseModel):
     """Connection metadata for a discovered serial or network robot."""
 
-    connection_string: str | None
-    serial_number: str | None
+    connection_string: str | None = None
+    serial_number: str | None = None

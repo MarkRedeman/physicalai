@@ -52,6 +52,11 @@ def test_probe_is_runtime_checkable() -> None:
     assert isinstance(probe, RobotProbe)
 
 
+def test_serial_port_info_allows_either_identifier() -> None:
+    assert SerialPortInfo(serial_number="SN-001").connection_string is None
+    assert SerialPortInfo(connection_string="/dev/ttyUSB0").serial_number is None
+
+
 def test_typed_payload_reaches_identify() -> None:
     probe = TestProbe()
     payload = TestPayload(serial_number="SN-001")
