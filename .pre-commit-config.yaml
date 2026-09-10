@@ -5,7 +5,7 @@
 
 minimum_prek_version: "0.2.19"
 
-exclude: ^CHANGELOG\.md$
+exclude: (^|/)CHANGELOG\.md$
 
 default_language_version:
   python: python3.12

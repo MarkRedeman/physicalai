@@ -44,6 +44,8 @@ jobs:
             test:
               - src/**
               - tests/**
+              - packages/**/src/**
+              - packages/**/tests/**
               - pyproject.toml
               - uv.lock
               - .github/workflows/library.yml
@@ -90,10 +92,10 @@ jobs:
           version: "0.8.8"
 
       - name: Install dependencies
-        run: uv sync --frozen --extra tests --extra robots --extra transport
+        run: uv sync --frozen --all-packages --extra tests --extra robots --extra transport
 
       - name: Run python unit tests
-        run: uv run pytest tests/unit
+        run: uv run pytest --import-mode=importlib tests/unit packages/*/tests
 
   required-check:
     name: Required Check library
