@@ -1701,7 +1701,6 @@ docs = [
 
 [[package]]
 name = "physicalai-studio-plugin"
-version = "0.1.0"
 source = { editable = "packages/physicalai-studio-plugin" }
 dependencies = [
     { name = "physicalai" },

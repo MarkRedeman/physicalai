@@ -5,7 +5,7 @@ Types, protocols, and utilities for building robot catalog plugins for
 
 For installing curated or unofficial plugins in Studio, and for registering a
 plugin in Studio's curated manifest, see
-[`application/docs/robot-plugins.md`](../docs/robot-plugins.md).
+[`application/docs/robot-plugins.md`](https://github.com/open-edge-platform/physical-ai-studio/blob/main/application/docs/robot-plugins.md).
 
 External robot types register themselves with Studio through an
 [entry-point](#entry-point-registration) mechanism. This lets Studio discover,
