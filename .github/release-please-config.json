@@ -23,7 +23,8 @@
     ".": {
       "release-type": "simple",
       "package-name": "physicalai",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": false
     },
     "packages/physicalai-studio-plugin": {
       "release-type": "python",

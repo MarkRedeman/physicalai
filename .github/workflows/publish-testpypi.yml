@@ -48,8 +48,13 @@ jobs:
         working-directory: ${{ matrix.package.path }}
         env:
           PACKAGE_NAME: ${{ matrix.package.name }}
+          PACKAGE_PATH: ${{ matrix.package.path }}
         run: |
-          TAG_PREFIX="${PACKAGE_NAME}-v"
+          if [ "${PACKAGE_PATH}" = "." ]; then
+            TAG_PREFIX="v"
+          else
+            TAG_PREFIX="${PACKAGE_NAME}-v"
+          fi
           VERSION=$(git tag --list "${TAG_PREFIX}*" --sort=-version:refname | head -n 1 | sed "s/^${TAG_PREFIX}//" || true)
           if [ -z "${VERSION}" ]; then
             VERSION="0.0.0"
