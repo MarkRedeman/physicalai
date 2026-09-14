@@ -27,7 +27,7 @@ class PortScanner(Protocol):
 
     @property
     def robots(self) -> list[SerialPortInfo]:
-        """Return currently discovered robot connections."""
+        """Currently discovered robot connections."""
 
 
 @runtime_checkable

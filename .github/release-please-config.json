@@ -24,6 +24,7 @@
       "release-type": "simple",
       "package-name": "physicalai",
       "changelog-path": "CHANGELOG.md",
+      "exclude-paths": ["packages/*"],
       "include-component-in-tag": false
     },
     "packages/physicalai-studio-plugin": {

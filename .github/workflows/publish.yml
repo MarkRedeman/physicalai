@@ -15,8 +15,7 @@ jobs:
       contents: write # Needed to create releases and tags
       pull-requests: write # Needed to create release PRs
     outputs:
-      packages: ${{ steps.packages.outputs.matrix }}
-      rp_outputs: ${{ github.event_name == 'push' && toJSON(steps.release-please.outputs) || '{}' }}
+      packages: ${{ steps.release-outputs.outputs.matrix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -36,6 +35,45 @@ jobs:
           manifest-file: .github/.release-please-manifest.json
           target-branch: main
 
+      - id: release-outputs
+        env:
+          RELEASE_PLEASE_OUTPUTS: ${{ github.event_name == 'push' && toJSON(steps.release-please.outputs) || '{}' }}
+        run: |
+          # release-please output for physicalai (the root package):
+          # {"release_created":"true","tag_name":"v0.1.2"}
+          #
+          # release-please output for physicalai-studio-plugin:
+          # {"packages/physicalai-studio-plugin--release_created":"true",
+          #  "packages/physicalai-studio-plugin--tag_name":"physicalai-studio-plugin-v0.1.1"}
+          #
+          # Both normalize to a matrix entry consumed by subsequent jobs:
+          # {"name":"physicalai","path":".","release_created":"true","tag_name":"v0.1.2"}
+          # {"name":"physicalai-studio-plugin","path":"packages/physicalai-studio-plugin","release_created":"true","tag_name":"physicalai-studio-plugin-v0.1.1"}
+          echo "matrix=$(jq -cn \
+            --argjson packages "$(jq -c '.packages' .github/release-please-config.json)" \
+            --argjson releases "$RELEASE_PLEASE_OUTPUTS" \
+            '[
+              $packages | to_entries[] | . as $package |
+              {
+                name: $package.value["package-name"],
+                path: $package.key,
+                release_created: (
+                  if $package.key == "." then
+                    $releases.release_created
+                  else
+                    $releases["\($package.key)--release_created"]
+                  end // "false"
+                ),
+                tag_name: (
+                  if $package.key == "." then
+                    $releases.tag_name
+                  else
+                    $releases["\($package.key)--tag_name"]
+                  end // ""
+                )
+              }
+            ]')" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ matrix.package.name }}
     runs-on: ubuntu-latest
@@ -46,7 +84,7 @@ jobs:
     permissions:
       contents: read
     env:
-      RELEASE_CREATED: ${{ fromJSON(needs.release-please.outputs.rp_outputs)[format('{0}--release_created', matrix.package.path)] }}
+      RELEASE_CREATED: ${{ matrix.package.release_created }}
     steps:
       - name: Skip when no release was created for this package
         if: ${{ env.RELEASE_CREATED != 'true' }}
@@ -56,7 +94,7 @@ jobs:
         if: ${{ env.RELEASE_CREATED == 'true' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ fromJSON(needs.release-please.outputs.rp_outputs)[format('{0}--tag_name', matrix.package.path)] }}
+          ref: ${{ matrix.package.tag_name }}
           lfs: true
           persist-credentials: false
           fetch-depth: 0 # needed for hatch-vcs to resolve version from git tags
@@ -89,7 +127,7 @@ jobs:
     permissions:
       contents: read
     env:
-      RELEASE_CREATED: ${{ fromJSON(needs.release-please.outputs.rp_outputs)[format('{0}--release_created', matrix.package.path)] }}
+      RELEASE_CREATED: ${{ matrix.package.release_created }}
     steps:
       - name: Skip when no release was created for this package
         if: ${{ env.RELEASE_CREATED != 'true' }}
@@ -145,7 +183,7 @@ jobs:
       name: pypi
       url: https://pypi.org/p/${{ matrix.package.name }}
     env:
-      RELEASE_CREATED: ${{ fromJSON(needs.release-please.outputs.rp_outputs)[format('{0}--release_created', matrix.package.path)] }}
+      RELEASE_CREATED: ${{ matrix.package.release_created }}
     steps:
       - name: Download distributions
         if: ${{ env.RELEASE_CREATED == 'true' }}
