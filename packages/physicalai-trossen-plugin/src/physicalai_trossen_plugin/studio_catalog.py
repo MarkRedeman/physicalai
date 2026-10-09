@@ -112,17 +112,44 @@ _BIMANUAL_TROSSEN_TO_URDF = {
     "right_gripper.pos": ["follower_right_left_carriage_joint", "follower_right_right_carriage_joint"],
 }
 
-_TROSSEN_SINGLE_ARM_ASSET = RobotAsset(
+_TROSSEN_SINGLE_ARM_FOLLOWER_ASSET = RobotAsset(
     urdf_relative_path=Path("urdf/generated/wxai/wxai_follower.urdf"),
     packages={"trossen_arm_description": Path()},
     joint_map=_TROSSEN_TO_URDF,
     root_resolver=get_urdf_path,
 )
 
-_TROSSEN_BIMANUAL_ASSET = RobotAsset(
+_TROSSEN_SINGLE_ARM_LEADER_ASSET = RobotAsset(
+    urdf_relative_path=Path("urdf/generated/wxai/wxai_leader_left.urdf"),
+    packages={"trossen_arm_description": Path()},
+    joint_map=_TROSSEN_TO_URDF,
+    root_resolver=get_urdf_path,
+)
+
+_TROSSEN_BIMANUAL_FOLLOWER_ASSET = RobotAsset(
     urdf_relative_path=Path("urdf/generated/stationary_ai.urdf"),
     packages={"trossen_arm_description": Path()},
     joint_map=_BIMANUAL_TROSSEN_TO_URDF,
+    root_resolver=get_urdf_path,
+)
+
+_BIMANUAL_TROSSEN_LEADER_TO_URDF = {
+    **{
+        action_name: [joint_name.replace("follower_left_", "leader_left_") for joint_name in joint_names]
+        for action_name, joint_names in _BIMANUAL_TROSSEN_TO_URDF.items()
+        if action_name.startswith("left_")
+    },
+    **{
+        action_name: [joint_name.replace("follower_right_", "leader_right_") for joint_name in joint_names]
+        for action_name, joint_names in _BIMANUAL_TROSSEN_TO_URDF.items()
+        if action_name.startswith("right_")
+    },
+}
+
+_TROSSEN_BIMANUAL_LEADER_ASSET = RobotAsset(
+    urdf_relative_path=Path("urdf/generated/stationary_ai_leader.urdf"),
+    packages={"trossen_arm_description": Path()},
+    joint_map=_BIMANUAL_TROSSEN_LEADER_TO_URDF,
     root_resolver=get_urdf_path,
 )
 
@@ -245,7 +272,7 @@ def _definitions() -> list[RobotCatalogDefinition]:
             role="follower",
             robot_builder=_build_trossen_single_arm_driver,
             robot_payload=TrossenSingleArmPayload,
-            asset=_TROSSEN_SINGLE_ARM_ASSET,
+            asset=_TROSSEN_SINGLE_ARM_FOLLOWER_ASSET,
             adapter_options=RobotAdapterOptions(include_velocities=True, goal_time_scale=1.0, external_effort_gain=0.1),
             probe=_SINGLE_ARM_PROBE,
         ),
@@ -255,7 +282,7 @@ def _definitions() -> list[RobotCatalogDefinition]:
             role="leader",
             robot_builder=_build_trossen_single_arm_driver,
             robot_payload=TrossenSingleArmPayload,
-            asset=_TROSSEN_SINGLE_ARM_ASSET,
+            asset=_TROSSEN_SINGLE_ARM_LEADER_ASSET,
             adapter_options=RobotAdapterOptions(include_velocities=True, goal_time_scale=1.0, external_effort_gain=0.1),
             probe=_SINGLE_ARM_PROBE,
         ),
@@ -265,7 +292,7 @@ def _definitions() -> list[RobotCatalogDefinition]:
             role="follower",
             robot_builder=_build_trossen_bimanual_driver,
             robot_payload=TrossenBimanualPayload,
-            asset=_TROSSEN_BIMANUAL_ASSET,
+            asset=_TROSSEN_BIMANUAL_FOLLOWER_ASSET,
             adapter_options=RobotAdapterOptions(include_velocities=True, goal_time_scale=1.0, external_effort_gain=0.1),
             probe=_BIMANUAL_PROBE,
         ),
@@ -275,7 +302,7 @@ def _definitions() -> list[RobotCatalogDefinition]:
             role="leader",
             robot_builder=_build_trossen_bimanual_driver,
             robot_payload=TrossenBimanualPayload,
-            asset=_TROSSEN_BIMANUAL_ASSET,
+            asset=_TROSSEN_BIMANUAL_LEADER_ASSET,
             adapter_options=RobotAdapterOptions(include_velocities=True, goal_time_scale=1.0, external_effort_gain=0.1),
             probe=_BIMANUAL_PROBE,
         ),

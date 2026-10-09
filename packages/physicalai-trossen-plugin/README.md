@@ -34,9 +34,14 @@ preserved at [`urdf/LICENSE`](urdf/LICENSE).
 from physicalai_trossen_plugin import get_urdf_path
 
 urdf_root = get_urdf_path()
-single_arm = urdf_root / "urdf/generated/wxai/wxai_follower.urdf"
-bimanual = urdf_root / "urdf/generated/stationary_ai.urdf"
+single_arm_follower = urdf_root / "urdf/generated/wxai/wxai_follower.urdf"
+single_arm_leader = urdf_root / "urdf/generated/wxai/wxai_leader_left.urdf"
+bimanual_follower = urdf_root / "urdf/generated/stationary_ai.urdf"
+bimanual_leader = urdf_root / "urdf/generated/stationary_ai_leader.urdf"
 ```
+
+The single-arm leader catalog entry uses the left-handed leader model. The
+bimanual leader model includes left- and right-handed leader arms.
 
 ## Development
 
