@@ -50,14 +50,14 @@ def mock_trossen_arm() -> Generator[MagicMock, None, None]:
     mock_module = _make_mock_trossen_arm()
     with (
         patch.dict("sys.modules", {"trossen_arm": mock_module}),
-        patch("physicalai.robot.trossen.widowxai.trossen_arm", mock_module),
+        patch("physicalai_trossen_plugin.widowxai.trossen_arm", mock_module),
     ):
         yield mock_module
 
 
 def _make_arm(mock_module: MagicMock, role: str = "follower", ip: str = "192.168.1.1") -> object:
     """Return a fresh WidowXAI with independent mock driver."""
-    from physicalai.robot.trossen import WidowXAI
+    from physicalai_trossen_plugin import WidowXAI
 
     # Give each arm its own driver mock so they don't share state
     arm_driver = MagicMock()
@@ -79,7 +79,7 @@ def _make_arm(mock_module: MagicMock, role: str = "follower", ip: str = "192.168
 
 
 def _make_bimanual(mock_module: MagicMock, role: str = "follower"):
-    from physicalai.robot.trossen.bimanual_widowxai import BimanualWidowXAI
+    from physicalai_trossen_plugin.bimanual_widowxai import BimanualWidowXAI
 
     left = _make_arm(mock_module, role=role, ip="192.168.1.10")
     right = _make_arm(mock_module, role=role, ip="192.168.1.11")
@@ -93,8 +93,8 @@ def _make_bimanual(mock_module: MagicMock, role: str = "follower"):
 
 class TestBimanualWidowXAIConstruction:
     def test_mismatched_roles_raise(self, mock_trossen_arm: MagicMock) -> None:
-        from physicalai.robot.trossen import WidowXAI
-        from physicalai.robot.trossen.bimanual_widowxai import BimanualWidowXAI
+        from physicalai_trossen_plugin import WidowXAI
+        from physicalai_trossen_plugin.bimanual_widowxai import BimanualWidowXAI
 
         left = WidowXAI(ip="192.168.1.10", role="follower")  # type: ignore[arg-type]
         right = WidowXAI(ip="192.168.1.11", role="leader")  # type: ignore[arg-type]
@@ -138,8 +138,8 @@ class TestBimanualWidowXAIConnectivity:
         assert robot.is_connected() is False
 
     def test_connect_rolls_back_left_if_right_fails(self, mock_trossen_arm: MagicMock) -> None:
-        from physicalai.robot.trossen import WidowXAI
-        from physicalai.robot.trossen.bimanual_widowxai import BimanualWidowXAI
+        from physicalai_trossen_plugin import WidowXAI
+        from physicalai_trossen_plugin.bimanual_widowxai import BimanualWidowXAI
 
         left = WidowXAI(ip="192.168.1.10", role="follower")  # type: ignore[arg-type]
         right = WidowXAI(ip="192.168.1.11", role="follower")  # type: ignore[arg-type]

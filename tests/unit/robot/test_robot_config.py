@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Generator
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
@@ -141,82 +140,6 @@ class TestSO101Config:
         robot = SO101(port="/dev/ttyUSB0", calibration=SAMPLE_CALIBRATION)
         assert isinstance(robot, Robot)
         assert isinstance(Config.from_instance(robot), Config)
-
-
-# ---------------------------------------------------------------------------
-# WidowXAI / BimanualWidowXAI
-# ---------------------------------------------------------------------------
-
-
-def _make_mock_trossen_arm() -> MagicMock:
-    module = MagicMock()
-    driver = MagicMock()
-    driver.get_is_configured.return_value = True
-    module.TrossenArmDriver.return_value = driver
-    module.Model.wxai_v0 = MagicMock(name="Model.wxai_v0")
-    module.StandardEndEffector.wxai_v0_follower = MagicMock(name="wxai_v0_follower")
-    module.StandardEndEffector.wxai_v0_leader = MagicMock(name="wxai_v0_leader")
-    module.Mode.position = MagicMock(name="Mode.position")
-    module.Mode.external_effort = MagicMock(name="Mode.external_effort")
-    return module
-
-
-@pytest.fixture
-def mock_trossen_arm() -> Generator[MagicMock, None, None]:
-    """Inject a mock ``trossen_arm`` so WidowX drivers import without the SDK."""
-    mock_module = _make_mock_trossen_arm()
-    # Drop cached modules so import picks up the mock even if a prior import failed.
-    for name in (
-        "physicalai.robot.trossen.widowxai",
-        "physicalai.robot.trossen.bimanual_widowxai",
-        "physicalai.robot.trossen",
-    ):
-        sys.modules.pop(name, None)
-    with patch.dict(sys.modules, {"trossen_arm": mock_module}):
-        yield mock_module
-
-
-class TestWidowXAIConfig:
-    def test_default_role_omitted(self, mock_trossen_arm: MagicMock) -> None:
-        from physicalai.robot import WidowXAI
-
-        robot = WidowXAI(ip="192.168.1.2")
-        wire = _assert_construction_round_trip(robot)
-        assert wire["class_path"] == "physicalai.robot.WidowXAI"
-        assert wire["init_args"] == {"ip": "192.168.1.2"}
-
-    def test_explicit_role_round_trip(self, mock_trossen_arm: MagicMock) -> None:
-        from physicalai.robot import WidowXAI
-
-        robot = WidowXAI(ip="10.0.0.1", role="leader")
-        wire = _assert_construction_round_trip(robot)
-        assert wire["init_args"] == {"ip": "10.0.0.1", "role": "leader"}
-
-    def test_protocol_still_holds(self, mock_trossen_arm: MagicMock) -> None:
-        from physicalai.robot import WidowXAI
-
-        robot = WidowXAI(ip="192.168.1.2")
-        assert isinstance(robot, Robot)
-        assert isinstance(Config.from_instance(robot), Config)
-
-
-class TestBimanualWidowXAIConfig:
-    def test_nested_arms_round_trip(self, mock_trossen_arm: MagicMock) -> None:
-        from physicalai.robot import BimanualWidowXAI, WidowXAI
-
-        left = WidowXAI(ip="192.168.1.10", role="follower")
-        right = WidowXAI(ip="192.168.1.11", role="follower")
-        robot = BimanualWidowXAI(left=left, right=right)
-        wire = _assert_construction_round_trip(robot)
-        assert wire["class_path"] == "physicalai.robot.BimanualWidowXAI"
-        left_cfg = wire["init_args"]["left"]
-        right_cfg = wire["init_args"]["right"]
-        assert isinstance(left_cfg, dict)
-        assert isinstance(right_cfg, dict)
-        assert left_cfg["class_path"] == "physicalai.robot.WidowXAI"
-        assert right_cfg["class_path"] == "physicalai.robot.WidowXAI"
-        assert left_cfg["init_args"] == {"ip": "192.168.1.10", "role": "follower"}
-        assert right_cfg["init_args"] == {"ip": "192.168.1.11", "role": "follower"}
 
 
 # ---------------------------------------------------------------------------
