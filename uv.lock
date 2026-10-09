@@ -14,6 +14,7 @@ members = [
     "physicalai-rebot-b601-plugin",
     "physicalai-stararm-plugin",
     "physicalai-studio-plugin",
+    "physicalai-trossen-plugin",
 ]
 
 [[package]]
@@ -183,7 +184,7 @@ name = "cffi"
 version = "2.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
+    { name = "pycparser" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9e/ef/008a1939e372c06329a3fce4279c02f328488f3526744906eeec3da7ad5f/cffi-2.1.1.tar.gz", hash = "sha256:dd31f52ea1086513bb9df30f8fcee9b8918323ae067a3d5b78bc826a000712be", size = 530807, upload-time = "2026-08-03T21:21:18.939Z" }
 wheels = [
@@ -2104,13 +2105,15 @@ plugin-rebot-b601 = [
 plugin-stararm = [
     { name = "physicalai-stararm-plugin" },
 ]
+plugin-trossen = [
+    { name = "physicalai-trossen-plugin" },
+]
 realsense = [
     { name = "pyrealsense2", marker = "sys_platform != 'darwin'" },
     { name = "pyrealsense2-macosx", marker = "sys_platform == 'darwin'" },
 ]
 robots = [
     { name = "feetech-servo-sdk" },
-    { name = "trossen-arm" },
 ]
 so101 = [
     { name = "feetech-servo-sdk" },
@@ -2123,9 +2126,6 @@ transport = [
     { name = "eclipse-zenoh" },
     { name = "iceoryx2" },
     { name = "msgpack" },
-]
-trossen = [
-    { name = "trossen-arm" },
 ]
 
 [package.dev-dependencies]
@@ -2170,6 +2170,7 @@ requires-dist = [
     { name = "physicalai-mujoco-plugin", marker = "python_full_version >= '3.12' and extra == 'plugin-mujoco'", editable = "packages/physicalai-mujoco-plugin" },
     { name = "physicalai-rebot-b601-plugin", marker = "python_full_version >= '3.12' and extra == 'plugin-rebot-b601'", editable = "packages/physicalai-rebot-b601-plugin" },
     { name = "physicalai-stararm-plugin", marker = "python_full_version >= '3.12' and extra == 'plugin-stararm'", editable = "packages/physicalai-stararm-plugin" },
+    { name = "physicalai-trossen-plugin", marker = "python_full_version >= '3.12' and extra == 'plugin-trossen'", editable = "packages/physicalai-trossen-plugin" },
     { name = "pydantic", specifier = ">=2.5" },
     { name = "pynokhwa", specifier = "==0.1.4" },
     { name = "pypylon", marker = "extra == 'basler'" },
@@ -2184,11 +2185,9 @@ requires-dist = [
     { name = "rerun-sdk", marker = "extra == 'observer-rerun'", specifier = ">=0.22" },
     { name = "safetensors", specifier = ">=0.4.3,<1.0.0" },
     { name = "transformers", specifier = ">=5.15.1,<5.16.0" },
-    { name = "trossen-arm", marker = "extra == 'robots'", specifier = ">=1.9.0" },
-    { name = "trossen-arm", marker = "extra == 'trossen'", specifier = ">=1.9.0" },
     { name = "typing-extensions", specifier = ">=4.5" },
 ]
-provides-extras = ["abb", "basler", "capture", "franka", "genicam", "notebooks", "observer-rerun", "plugin-bimanual-so101", "plugin-mujoco", "plugin-rebot-b601", "plugin-stararm", "realsense", "robots", "so101", "tests", "transport", "trossen", "ur"]
+provides-extras = ["abb", "basler", "capture", "franka", "genicam", "notebooks", "observer-rerun", "plugin-bimanual-so101", "plugin-mujoco", "plugin-rebot-b601", "plugin-stararm", "plugin-trossen", "realsense", "robots", "so101", "tests", "transport", "ur"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2352,6 +2351,37 @@ requires-dist = [
     { name = "physicalai", editable = "." },
     { name = "pydantic", specifier = ">=2.12" },
 ]
+
+[[package]]
+name = "physicalai-trossen-plugin"
+source = { editable = "packages/physicalai-trossen-plugin" }
+dependencies = [
+    { name = "loguru" },
+    { name = "numpy" },
+    { name = "physicalai" },
+    { name = "physicalai-studio-plugin" },
+    { name = "pydantic" },
+    { name = "trossen-arm" },
+]
+
+[package.optional-dependencies]
+tests = [
+    { name = "pytest" },
+    { name = "pytest-anyio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "loguru", specifier = ">=0.7" },
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "physicalai", editable = "." },
+    { name = "physicalai-studio-plugin", editable = "packages/physicalai-studio-plugin" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pytest", marker = "extra == 'tests'" },
+    { name = "pytest-anyio", marker = "extra == 'tests'" },
+    { name = "trossen-arm", specifier = ">=1.9.0" },
+]
+provides-extras = ["tests"]
 
 [[package]]
 name = "pillow"
