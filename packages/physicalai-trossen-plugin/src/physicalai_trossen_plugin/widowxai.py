@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-# ruff: file-ignore[too-many-statements-in-try-clause]
+# ruff: noqa: BLE001, FBT003
 
 """Trossen WidowX AI robot arm driver.
 
@@ -154,17 +154,17 @@ class WidowXAI(Robot):
                 trossen_arm.Model.wxai_v0,
                 end_effector,
                 self._ip,
-                True,  # ruff: ignore[boolean-positional-value-in-call]
+                True,
                 timeout=5,
             )
 
             driver.set_all_modes(trossen_arm.Mode.position)
-            driver.set_all_positions(list(HOME_POSITION), 2.0, True)  # ruff: ignore[boolean-positional-value-in-call]
+            driver.set_all_positions(trossen_arm.VectorDouble(HOME_POSITION), 2.0, True)
 
             if self._role == "leader":
                 # Zero external efforts before homing (essential for leader)
                 driver.set_all_modes(trossen_arm.Mode.external_effort)
-                driver.set_all_external_efforts(list(HOME_POSITION), 0.0, False)  # ruff: ignore[boolean-positional-value-in-call]
+                driver.set_all_external_efforts(trossen_arm.VectorDouble(HOME_POSITION), 0.0, False)
 
         except Exception:
             with contextlib.suppress(Exception):
@@ -183,13 +183,13 @@ class WidowXAI(Robot):
 
         try:
             self._driver.set_all_modes(trossen_arm.Mode.position)
-            self._driver.set_all_positions(list(HOME_POSITION), 2.0, True)  # ruff: ignore[boolean-positional-value-in-call]
-        except Exception:  # ruff: ignore[blind-except]
+            self._driver.set_all_positions(trossen_arm.VectorDouble(HOME_POSITION), 2.0, True)
+        except Exception:
             logger.warning("Failed to home WidowXAI during disconnect; proceeding to cleanup.")
         finally:
             try:
                 self._driver.cleanup()
-            except Exception:  # ruff: ignore[blind-except]
+            except Exception:
                 logger.warning("Error during WidowXAI cleanup; continuing.")
             self._driver = None
 
@@ -277,7 +277,7 @@ class WidowXAI(Robot):
         present_positions = np.asarray(driver.get_all_positions(), dtype=np.float32)
         safe_action = self._ensure_safe_goal_position(target_radians, present_positions, self.MAX_RELATIVE_TARGET)
 
-        driver.set_all_positions(safe_action.tolist(), goal_time, False)  # ruff: ignore[boolean-positional-value-in-call]
+        driver.set_all_positions(trossen_arm.VectorDouble(safe_action.tolist()), goal_time, False)
 
     def is_connected(self) -> bool:
         """Return True when the SDK driver is configured."""
@@ -309,4 +309,6 @@ class WidowXAI(Robot):
         driver = self._require_driver()
 
         driver.set_all_modes(trossen_arm.Mode.external_effort)
-        driver.set_all_external_efforts([-gain * e for e in efforts.tolist()], 0.0, False)  # ruff: ignore[boolean-positional-value-in-call]
+        driver.set_all_external_efforts(
+            trossen_arm.VectorDouble([-gain * e for e in efforts.tolist()]), 0.0, blocking=False
+        )

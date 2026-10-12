@@ -40,6 +40,7 @@ def _make_mock_trossen_arm() -> MagicMock:
     driver.set_all_external_efforts.return_value = None
 
     module.TrossenArmDriver.return_value = driver
+    module.VectorDouble.side_effect = lambda values: list(values)
 
     module.Model.wxai_v0 = MagicMock(name="Model.wxai_v0")
     module.StandardEndEffector.wxai_v0_follower = MagicMock(name="wxai_v0_follower")

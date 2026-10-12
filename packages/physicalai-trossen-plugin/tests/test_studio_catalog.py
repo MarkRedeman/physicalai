@@ -6,7 +6,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 from xml.etree import ElementTree
+
+import pytest
 
 from physicalai.config import Config
 from physicalai.robot import Robot
@@ -91,6 +94,23 @@ def test_catalog_asset_meshes_and_joint_maps_resolve() -> None:
             assert filename is not None
             assert filename.startswith(package_uri_prefix)
             assert (asset.root_resolver() / filename.removeprefix(package_uri_prefix)).is_file()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(("platform", "count_flag"), [("linux", "-c"), ("win32", "-n")])
+async def test_ping_uses_only_cross_platform_arguments(
+    monkeypatch: pytest.MonkeyPatch, platform: str, count_flag: str
+) -> None:
+    import physicalai_trossen_plugin.studio_catalog as catalog
+
+    proc = MagicMock()
+    proc.wait = AsyncMock(return_value=0)
+    create_subprocess_exec = AsyncMock(return_value=proc)
+    monkeypatch.setattr(catalog.asyncio, "create_subprocess_exec", create_subprocess_exec)
+    monkeypatch.setattr(catalog.sys, "platform", platform)
+
+    assert await catalog._ping("192.168.1.100")
+    assert create_subprocess_exec.await_args.args == ("ping", count_flag, "1", "192.168.1.100")
 
 
 def test_drivers_export_plugin_construction_recipes() -> None:

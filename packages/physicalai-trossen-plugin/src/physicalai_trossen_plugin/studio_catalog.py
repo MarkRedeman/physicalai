@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-# ruff: file-ignore[undocumented-public-method, f-string-in-exception, boolean-positional-value-in-call, import-outside-top-level, no-self-use, unused-async, raise-vanilla-args]
+# ruff: noqa: D102, FBT003, PLC0415, PLR6301, RUF029
 
 """Studio catalog plugin for Trossen WidowX AI robot arms."""
 
@@ -39,7 +39,7 @@ class TrossenSingleArmPayload(BaseModel):
     connection_string: str = Field(..., description="IP address of the robot")
 
     model_config = ConfigDict(
-        json_schema_extra={
+        json_schema_extra={  # pyrefly: ignore [bad-argument-type]
             "example": {"connection_string": "192.168.1.100"},
             **robot_payload_ui([
                 {
@@ -60,7 +60,7 @@ class TrossenBimanualPayload(BaseModel):
     connection_string_right: str = Field(..., description="IP address of the right arm")
 
     model_config = ConfigDict(
-        json_schema_extra={
+        json_schema_extra={  # pyrefly: ignore [bad-argument-type]
             "example": {
                 "connection_string_left": "192.168.1.100",
                 "connection_string_right": "192.168.1.101",
@@ -159,7 +159,8 @@ async def _build_trossen_single_arm_driver(
 ) -> WidowXAI:
     payload = robot.payload
     if not isinstance(payload, TrossenSingleArmPayload):
-        raise TypeError(f"Expected TrossenSingleArmPayload, got {type(payload).__name__}")
+        msg = f"Expected TrossenSingleArmPayload, got {type(payload).__name__}"
+        raise TypeError(msg)
     role = "follower" if robot.type == "Trossen_WidowXAI_Follower" else "leader"
     return WidowXAI(ip=payload.connection_string, role=role)
 
@@ -169,7 +170,8 @@ async def _build_trossen_bimanual_driver(
 ) -> BimanualWidowXAI:
     payload = robot.payload
     if not isinstance(payload, TrossenBimanualPayload):
-        raise TypeError(f"Expected TrossenBimanualPayload, got {type(payload).__name__}")
+        msg = f"Expected TrossenBimanualPayload, got {type(payload).__name__}"
+        raise TypeError(msg)
     role = "follower" if robot.type == "Trossen_Bimanual_WidowXAI_Follower" else "leader"
     return BimanualWidowXAI(
         left=WidowXAI(ip=payload.connection_string_left, role=role),
@@ -179,7 +181,7 @@ async def _build_trossen_bimanual_driver(
 
 async def _ping(ip: str, ping_timeout: float = 1.0) -> bool:
     param = "-n" if sys.platform.lower().startswith("win") else "-c"
-    command = ["ping", param, "1", "-W", str(int(ping_timeout * 1000)), ip]
+    command = ["ping", param, "1", ip]
     proc = await asyncio.create_subprocess_exec(
         *command,
         stdout=asyncio.subprocess.DEVNULL,
