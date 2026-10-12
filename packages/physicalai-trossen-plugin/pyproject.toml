@@ -7,7 +7,7 @@ name = "physicalai-trossen-plugin"
 dynamic = ["version"]
 description = "Trossen WidowX AI robot arm plugin for PhysicalAI"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 license = "Apache-2.0"
 dependencies = [
     "physicalai>=0.1.1",

@@ -143,6 +143,23 @@ class TestSO101Config:
 
 
 # ---------------------------------------------------------------------------
+# Trossen compatibility aliases
+# ---------------------------------------------------------------------------
+
+
+class TestTrossenCompatibilityAliases:
+    def test_legacy_root_class_path_instantiates_plugin_driver(self) -> None:
+        pytest.importorskip("trossen_arm", reason="trossen-arm SDK is not installed")
+
+        from physicalai_trossen_plugin import WidowXAI as PluginWidowXAI
+
+        robot = Config("physicalai.robot.WidowXAI", {"ip": "192.168.1.10"}).instantiate()
+
+        assert isinstance(robot, PluginWidowXAI)
+        assert Config.from_instance(robot).to_dict()["class_path"] == "physicalai_trossen_plugin.WidowXAI"
+
+
+# ---------------------------------------------------------------------------
 # SharedRobot (construction recipe only — no session / connection state)
 # ---------------------------------------------------------------------------
 
