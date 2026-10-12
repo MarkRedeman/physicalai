@@ -86,8 +86,8 @@ def test_catalog_asset_meshes_and_joint_maps_resolve() -> None:
         joint_names = {joint.get("name") for joint in root.findall("joint")}
 
         assert all(joint_name in joint_names for joints in asset.joint_map.values() for joint_name in joints)
-        for mesh in root.findall(".//mesh"):
-            filename = mesh.get("filename")
+        for asset_element in root.findall(".//*[@filename]"):
+            filename = asset_element.get("filename")
             assert filename is not None
             assert filename.startswith(package_uri_prefix)
             assert (asset.root_resolver() / filename.removeprefix(package_uri_prefix)).is_file()

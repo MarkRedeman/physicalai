@@ -26,9 +26,10 @@ the Physical AI Studio robot catalog.
 
 ## URDF assets
 
-This package vendors the Trossen `trossen_arm_description` repository at
-revision `21d8b360c211c2ad8a065d8f462cbec0207626e7`. Its source license is
-preserved at [`urdf/LICENSE`](urdf/LICENSE).
+This package vendors the generated URDFs and mesh assets required by its
+catalog entries from Trossen `trossen_arm_description` revision
+`21d8b360c211c2ad8a065d8f462cbec0207626e7`. The source license is preserved
+at [`urdf/LICENSE`](urdf/LICENSE).
 
 ```python
 from physicalai_trossen_plugin import get_urdf_path
