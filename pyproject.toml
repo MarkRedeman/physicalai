@@ -14,6 +14,7 @@ physicalai-bimanual-so101-plugin = { workspace = true }
 physicalai-rebot-b601-plugin = { workspace = true }
 physicalai-stararm-plugin = { workspace = true }
 physicalai-trossen-plugin = { workspace = true }
+physicalai-franka-plugin = { workspace = true }
 
 [project]
 name = "physicalai"
@@ -74,8 +75,8 @@ capture = [
 ]
 ur = []
 abb = []
-franka = []
 so101 = ["feetech-servo-sdk"]
+franka = ["physicalai-franka-plugin[franka]; python_version >= '3.12' and python_version < '3.13'"]
 observer-rerun = ["rerun-sdk>=0.22"]
 robots = [
     "physicalai[ur]",
@@ -90,7 +91,7 @@ plugin-mujoco = ["physicalai-mujoco-plugin; python_version >= '3.12'"]
 plugin-bimanual-so101 = ["physicalai-bimanual-so101-plugin; python_version >= '3.12'"]
 plugin-rebot-b601 = ["physicalai-rebot-b601-plugin; python_version >= '3.12'"]
 plugin-stararm = ["physicalai-stararm-plugin; python_version >= '3.12'"]
-plugin-trossen = ["physicalai-trossen-plugin; python_version >= '3.12'"]
+plugin-franka = ["physicalai-franka-plugin; python_version >= '3.12'"]
 
 [dependency-groups]
 dev = ["pytest", "mypy", "pyrefly", "ruff>=0.15.12", "prek"]
@@ -129,6 +130,7 @@ search-path = [
     "src",
     "packages/physicalai-studio-plugin/src",
     "packages/physicalai-mujoco-plugin/src",
+    "packages/physicalai-franka-plugin/src",
 ]
 project-includes = [
     "src",
@@ -136,6 +138,7 @@ project-includes = [
     "packages/physicalai-studio-plugin/src",
     "packages/physicalai-studio-plugin/tests",
     "packages/physicalai-mujoco-plugin/src",
+    "packages/physicalai-franka-plugin/src",
 ]
 ignore-missing-imports = ["*"]
 

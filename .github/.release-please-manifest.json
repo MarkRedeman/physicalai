@@ -6,4 +6,5 @@
   "packages/physicalai-lerobot-plugin": "0.4.0",
   "packages/physicalai-stararm-plugin": "0.4.0",
   "packages/physicalai-mujoco-plugin": "0.3.1"
+  "packages/physicalai-franka-plugin": "0.1.0"
 }
