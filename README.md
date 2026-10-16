@@ -49,12 +49,12 @@ With hardware-specific extras:
 pip install physicalai[realsense]   # Intel RealSense cameras
 pip install physicalai[basler]      # Basler industrial cameras
 pip install physicalai[so101]       # SO-101 robot arm
-pip install physicalai-trossen-plugin  # Trossen WidowX robots
 ```
 
 With first-party plugins (Python 3.12+):
 
 ```bash
+pip install "physicalai[trossen-plugin]"         # Trossen WidowX robots
 pip install "physicalai[plugin-mujoco]"          # simulated robots (MuJoCo)
 pip install "physicalai[plugin-bimanual-so101]"  # bimanual SO-101
 pip install "physicalai[plugin-rebot-b601]"      # Seeed reBot B601
