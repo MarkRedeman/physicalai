@@ -13,8 +13,8 @@ Requires the ``feetech-servo-sdk`` package::
 
 The driver supports two roles:
 
-* **follower** (default) — torque enabled, used for inference / deployment.
-* **leader** — torque disabled, used for teleoperation (read-only).
+* **follower** (default) — torque enabled by default, used for inference / deployment.
+* **leader** — torque disabled by default, used for teleoperation (read-only).
 
 Calibration data can be loaded from a JSON file so that joint positions are
 reported in calibrated normalized units rather than raw servo ticks.
@@ -104,8 +104,8 @@ class SO101(Robot):
     Args:
         port: Serial port path, e.g. ``"/dev/ttyUSB0"`` or ``"/dev/ttyACM0"``.
         baudrate: Serial baudrate. Defaults to 1 000 000 (STS3215 factory default).
-        role: ``"follower"`` (torque enabled, full control) or ``"leader"``
-            (torque disabled, read-only for teleoperation).
+        role: ``"follower"`` (torque enabled by default, full control) or ``"leader"``
+            (torque disabled by default, read-only for teleoperation).
         calibration: SO-101 calibration object or calibration JSON path.
             This is required for normal operation.
         unit: Joint-space command/observation unit. Defaults to ``"normalized"``.
@@ -113,6 +113,11 @@ class SO101(Robot):
             Normalized maps body joints to ``[-100, 100]``. Degrees reports body
             angles relative to each calibrated range midpoint. The gripper uses
             ``[0, 100]`` in both modes. Uncalibrated mode only supports ``"ticks"``.
+        enable_torque_on_connect: Enable torque after connecting. ``None`` uses
+            the role default: enabled for followers, disabled for leaders.
+        disable_torque_on_disconnect: Disable torque before closing the port.
+            ``None`` defaults to True for leaders and False for followers.
+            False holds the current position; True can let the arm fall under gravity.
     """
 
     JOINT_ORDER: ClassVar[list[str]] = list(SO101_JOINT_ORDER)
@@ -132,6 +137,8 @@ class SO101(Robot):
         unit: SO101Unit = "normalized",
         *,
         allow_uncalibrated: bool = False,
+        enable_torque_on_connect: bool | None = None,
+        disable_torque_on_disconnect: bool | None = None,
     ) -> None:
         """Initialize the SO-101 driver (does not open the connection).
 
@@ -182,8 +189,12 @@ class SO101(Robot):
         # Connection state (set during connect()) --------------------------
         self._connection: _SO101Connection | None = None
 
-        # Torque ON/OFF behavior on disconnect (default: True for follower, False for leader)
-        self._torque_on_disconnect: bool = role == "follower"
+        self.enable_torque_on_connect = (
+            role == "follower" if enable_torque_on_connect is None else enable_torque_on_connect
+        )
+        self.disable_torque_on_disconnect = (
+            role == "leader" if disable_torque_on_disconnect is None else disable_torque_on_disconnect
+        )
 
     @classmethod
     def uncalibrated(
@@ -192,6 +203,9 @@ class SO101(Robot):
         baudrate: int = 1_000_000,
         role: Literal["leader", "follower"] = "follower",
         unit: SO101Unit = "ticks",
+        *,
+        enable_torque_on_connect: bool | None = None,
+        disable_torque_on_disconnect: bool | None = None,
     ) -> SO101:
         """Create an SO-101 instance in explicit raw-ticks mode.
 
@@ -211,6 +225,8 @@ class SO101(Robot):
             role=role,
             unit=unit,
             allow_uncalibrated=True,
+            enable_torque_on_connect=enable_torque_on_connect,
+            disable_torque_on_disconnect=disable_torque_on_disconnect,
         )
 
     @property
@@ -414,8 +430,7 @@ class SO101(Robot):
             # Configure servo registers (PID, timing, gripper protection) ------
             self._configure_servos()
 
-            # Configure torque based on role ------------------------------------
-            self._set_torque(enabled=self.role == "follower")
+            self._set_torque(enabled=self.enable_torque_on_connect)
         except (OSError, RuntimeError):
             with contextlib.suppress(Exception):
                 port_handler.closePort()
@@ -426,8 +441,8 @@ class SO101(Robot):
 
     @property
     def torque_on_disconnect(self) -> bool:
-        """Whether torque remains enabled after disconnect."""
-        return self._torque_on_disconnect
+        """Compatibility alias for the inverse of disable_torque_on_disconnect."""
+        return not self.disable_torque_on_disconnect
 
     @torque_on_disconnect.setter
     def torque_on_disconnect(self, value: bool) -> None:
@@ -445,17 +460,18 @@ class SO101(Robot):
         if self.role != "follower" and value:
             msg = "Torque on disconnect can only be enabled for follower arms."
             raise ValueError(msg)
-        if not value and self._torque_on_disconnect:
+        if not value and self.torque_on_disconnect:
             logger.warning(
                 "Disabling torque on disconnect will cause the arm to drop under gravity. Ensure this is intentional.",
             )
-        self._torque_on_disconnect = value
+        self.disable_torque_on_disconnect = not value
 
     def disconnect(self) -> None:
         """Disconnect from the robot, leaving it in a safe state.
 
-        * **Follower**: torque remains enabled (arm holds position).
-        * **Leader**: torque stays disabled.
+        Disable torque when ``disable_torque_on_disconnect`` is True; otherwise
+        hold the current position with torque enabled. Support the arm before
+        disabling torque to prevent it from falling under gravity.
 
         Idempotent: calling ``disconnect()`` when not connected is a no-op.
         """
@@ -464,11 +480,13 @@ class SO101(Robot):
             return  # not connected
 
         try:
-            if self._torque_on_disconnect:
+            if self.disable_torque_on_disconnect:
+                self._set_torque(enabled=False)
+            else:
                 self._hold_position()
         except (OSError, RuntimeError):
             logger.exception(
-                "Failed to hold position while disconnecting SO-101; proceeding to close port.",
+                "Failed to configure torque while disconnecting SO-101; proceeding to close port.",
             )
         finally:
             self._connection = None
@@ -516,7 +534,7 @@ class SO101(Robot):
         )
 
     def send_action(self, action: np.ndarray, *, goal_time: float = 0.1) -> None:
-        """Send joint position commands to all servos.
+        """Send joint position commands to all servos and enable torque.
 
         Args:
             action: Array of shape ``(6,)`` with target joint positions in
@@ -540,6 +558,8 @@ class SO101(Robot):
 
         ticks = self._unit_to_ticks(action) if self._calibration is not None else np.round(action).astype(np.int32)
         self._write_joint_positions(ticks)
+        # Set the new goal first to avoid moving toward a stale goal when torque was off.
+        self._set_torque(enabled=True)
 
     def is_connected(self) -> bool:
         """Check if robot is connected.

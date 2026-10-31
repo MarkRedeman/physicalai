@@ -102,6 +102,7 @@ def _create_robot(
     mock_sdk: MagicMock,
     role: Literal["leader", "follower"] = "follower",
     calibration: Any | None = None,
+    **options: Any,
 ) -> Any:
     """Instantiate SO101 with the mocked SDK."""
     from physicalai_so101_plugin import SO101, SO101Calibration
@@ -113,6 +114,7 @@ def _create_robot(
         port="/dev/ttyUSB0",
         role=role,
         calibration=calibration,
+        **options,
     )
 
 
@@ -281,6 +283,50 @@ class TestSO101Lifecycle:
         torque_values = [c.args[3] if len(c.args) > 3 else c[0][3] for c in torque_calls]
         assert all(v == 0 for v in torque_values)
 
+    @pytest.mark.parametrize("role", ["leader", "follower"])
+    @pytest.mark.parametrize("enabled", [False, True])
+    def test_connect_torque_override(self, mock_sdk: MagicMock, role: str, enabled: bool) -> None:
+        robot = _create_robot(mock_sdk, role=role, enable_torque_on_connect=enabled)
+        robot.connect()
+        mock_sdk.PacketHandler.return_value.write1ByteTxRx.reset_mock()
+        robot.get_observation()
+        mock_sdk.PacketHandler.return_value.write1ByteTxRx.assert_not_called()
+
+        robot.disconnect()
+        robot.connect()
+        calls = mock_sdk.PacketHandler.return_value.write1ByteTxRx.call_args_list
+        assert [c.args[3] for c in calls if c.args[2] == 40][-6:] == [int(enabled)] * 6
+
+    @pytest.mark.parametrize("role", ["leader", "follower"])
+    @pytest.mark.parametrize("disabled", [False, True, None])
+    def test_disconnect_torque_option(self, mock_sdk: MagicMock, role: str, disabled: bool | None) -> None:
+        robot = _create_robot(mock_sdk, role=role, disable_torque_on_disconnect=disabled)
+        robot.connect()
+        mock_sdk.PacketHandler.return_value.write1ByteTxRx.reset_mock()
+        robot.disconnect()
+
+        expected_disabled = role == "leader" if disabled is None else disabled
+        calls = mock_sdk.PacketHandler.return_value.write1ByteTxRx.call_args_list
+        assert [c.args[3] for c in calls if c.args[2] == 40] == [int(not expected_disabled)] * 6
+        assert mock_sdk.GroupSyncWrite.return_value.txPacket.call_count == int(not expected_disabled)
+        mock_sdk.PortHandler.return_value.closePort.assert_called_once()
+        assert not robot.is_connected()
+
+    def test_legacy_disconnect_option_disables_torque(self, mock_sdk: MagicMock) -> None:
+        robot = _create_robot(mock_sdk)
+        assert robot.torque_on_disconnect is True
+        robot.torque_on_disconnect = False
+        assert robot.disable_torque_on_disconnect is True
+        assert robot.torque_on_disconnect is False
+
+    def test_disconnect_closes_port_if_torque_control_fails(self, mock_sdk: MagicMock) -> None:
+        robot = _create_robot(mock_sdk, disable_torque_on_disconnect=True)
+        robot.connect()
+        mock_sdk.PacketHandler.return_value.write1ByteTxRx.side_effect = OSError("Serial failure")
+        robot.disconnect()
+        mock_sdk.PortHandler.return_value.closePort.assert_called_once()
+        assert not robot.is_connected()
+
     def test_port_open_failure_raises(self, mock_sdk: MagicMock) -> None:
         """ConnectionError if port cannot be opened."""
         mock_sdk.PortHandler.return_value.openPort.return_value = False
@@ -420,6 +466,27 @@ class TestSO101Action:
 
         mock_sdk.GroupSyncWrite.return_value.txPacket.assert_called_once()
 
+    def test_action_enables_torque_after_writing_goal(self, mock_sdk: MagicMock) -> None:
+        robot = _create_robot(mock_sdk, enable_torque_on_connect=False)
+        robot.connect()
+        for _ in range(2):
+            robot.set_torque(enabled=False)
+            mock_sdk.reset_mock()
+            robot.send_action(np.zeros(6, dtype=np.float32))
+            calls = mock_sdk.PacketHandler.return_value.write1ByteTxRx.call_args_list
+            assert [c.args[3] for c in calls if c.args[2] == 40] == [1] * 6
+            relevant_calls = [
+                c for c in mock_sdk.mock_calls
+                if c[0] in {"GroupSyncWrite().txPacket", "PacketHandler().write1ByteTxRx"}
+            ]
+            assert relevant_calls[0][0] == "GroupSyncWrite().txPacket"
+
+    def test_disconnected_action_does_not_enable_torque(self, mock_sdk: MagicMock) -> None:
+        robot = _create_robot(mock_sdk)
+        with pytest.raises(ConnectionError, match="not connected"):
+            robot.send_action(np.zeros(6, dtype=np.float32))
+        mock_sdk.PacketHandler.return_value.write1ByteTxRx.assert_not_called()
+
     def test_send_action_leader_raises(self, mock_sdk: MagicMock) -> None:
         """Leader raises RuntimeError on send_action()."""
         robot = _create_robot(mock_sdk, role="leader")
@@ -432,9 +499,11 @@ class TestSO101Action:
         """ValueError on wrong action shape."""
         robot = _create_robot(mock_sdk, role="follower")
         robot.connect()
+        mock_sdk.PacketHandler.return_value.write1ByteTxRx.reset_mock()
 
         with pytest.raises(ValueError, match="Expected action shape"):
             robot.send_action(np.zeros(3, dtype=np.float32))
+        mock_sdk.PacketHandler.return_value.write1ByteTxRx.assert_not_called()
 
     def test_send_action_calibrated_clamps(self, mock_sdk: MagicMock, calibration_obj: Any) -> None:
         """Calibrated send_action clamps to joint range limits."""

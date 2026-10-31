@@ -66,6 +66,22 @@ def test_calibration_object_encodes_to_dict() -> None:
     assert wire["init_args"]["calibration"] == SAMPLE_CALIBRATION
 
 
+@pytest.mark.parametrize("calibrated", [False, True])
+def test_torque_options_round_trip(calibrated: bool) -> None:
+    from physicalai_so101_plugin import SO101
+
+    options = {"enable_torque_on_connect": False, "disable_torque_on_disconnect": True}
+    robot = (
+        SO101(port="/dev/ttyUSB0", calibration=SAMPLE_CALIBRATION, **options)
+        if calibrated else SO101.uncalibrated(port="/dev/ttyUSB0", **options)
+    )
+    wire = _assert_construction_round_trip(robot)
+    restored = Config.from_dict(wire).instantiate()
+    for name, value in options.items():
+        assert wire["init_args"][name] is value
+        assert getattr(restored, name) is value
+
+
 def test_path_calibration_keeps_relative_string(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Preserve relative calibration strings in the serialized recipe."""
     from physicalai_so101_plugin import SO101
