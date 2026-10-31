@@ -135,6 +135,47 @@ def test_legacy_payload_defaults_to_normalized() -> None:
     payload = SO101RobotPayload.model_validate({"connection_string": "fake"})
     assert payload.unit == "normalized"
     assert payload.model_dump(mode="json")["unit"] == "normalized"
+    assert payload.enable_torque_on_connect is True
+    assert payload.disable_torque_on_disconnect is False
+
+
+@pytest.mark.parametrize("robot_type", ["SO101_Follower", "SO101_Leader"])
+def test_torque_options_are_advanced_configuration(robot_type: str) -> None:
+    from physicalai_studio_plugin import validate_robot_payload_ui
+    from physicalai_so101_plugin.studio_catalog import _definitions
+
+    model = next(d.robot_payload for d in _definitions() if d.type == robot_type)
+    validate_robot_payload_ui(model)
+    schema = model.model_json_schema()
+    for name in ("enable_torque_on_connect", "disable_torque_on_disconnect"):
+        assert schema["properties"][name]["type"] == "boolean"
+        assert schema["properties"][name]["x-physicalai-ui"]["advanced_configuration"] is True
+        assert {"kind": "field", "name": name} in schema["x-physicalai-ui"]
+    payload = model(connection_string="fake")
+    assert payload.enable_torque_on_connect is (robot_type == "SO101_Follower")
+    assert payload.disable_torque_on_disconnect is (robot_type == "SO101_Leader")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("robot_type", ["SO101_Follower", "SO101_Leader"])
+@pytest.mark.parametrize("calibrated", [False, True])
+@pytest.mark.parametrize("enabled,disabled", [(False, True), (True, False)])
+async def test_builder_passes_torque_options(
+    robot_type: str, calibrated: bool, enabled: bool, disabled: bool,
+) -> None:
+    from physicalai_so101_plugin.studio_catalog import _definitions, _build_so101_driver
+
+    model = next(d.robot_payload for d in _definitions() if d.type == robot_type)
+    payload = model(
+        connection_string="fake",
+        calibration=_calibration().joints if calibrated else None,
+        enable_torque_on_connect=enabled,
+        disable_torque_on_disconnect=disabled,
+    )
+    restored = model.model_validate(payload.model_dump(mode="json"))
+    arm = await _build_so101_driver(_StubRobot(robot_type, restored), _StubFactory(port="resolved"))  # type: ignore[arg-type]
+    assert arm.enable_torque_on_connect is enabled
+    assert arm.disable_torque_on_disconnect is disabled
 
 
 @pytest.mark.parametrize("unit", ["ticks", "radians", "use_degrees", ""])
@@ -149,17 +190,20 @@ def test_catalog_rejects_unsupported_unit(unit: str) -> None:
 @pytest.mark.parametrize("robot_type,role", [("SO101_Follower", "follower"), ("SO101_Leader", "leader")])
 @pytest.mark.parametrize("unit", ["normalized", "degrees"])
 async def test_builder_passes_selected_unit_and_role(robot_type: str, role: str, unit: str) -> None:
-    from physicalai_so101_plugin.studio_catalog import SO101RobotPayload, _build_so101_driver
+    from physicalai_so101_plugin.studio_catalog import _definitions, _build_so101_driver
 
-    payload = SO101RobotPayload(
+    model = next(d.robot_payload for d in _definitions() if d.type == robot_type)
+    payload = model(
         connection_string="fake", calibration=_calibration().joints, unit=unit,  # type: ignore[arg-type]
     )
-    restored = SO101RobotPayload.model_validate(payload.model_dump(mode="json"))
+    restored = model.model_validate(payload.model_dump(mode="json"))
     arm = await _build_so101_driver(_StubRobot(robot_type, restored), _StubFactory(port="resolved"))  # type: ignore[arg-type]
     assert arm.unit == unit
     assert arm.role == role
     assert arm.port == "resolved"
     assert not arm.is_connected()
+    assert arm.enable_torque_on_connect is (role == "follower")
+    assert arm.disable_torque_on_disconnect is (role == "leader")
 
 
 @pytest.mark.anyio
@@ -173,10 +217,12 @@ async def test_degree_selection_without_calibration_does_not_silently_use_ticks(
 
 @pytest.mark.anyio
 async def test_default_uncalibrated_bringup_is_unchanged() -> None:
-    from physicalai_so101_plugin.studio_catalog import SO101RobotPayload, _build_so101_driver
+    from physicalai_so101_plugin.studio_catalog import SO101LeaderPayload, _build_so101_driver
 
-    payload = SO101RobotPayload(connection_string="fake")
+    payload = SO101LeaderPayload(connection_string="fake")
     arm = await _build_so101_driver(_StubRobot("SO101_Leader", payload), _StubFactory(port="resolved"))  # type: ignore[arg-type]
     assert arm.unit == "ticks"
     assert arm.role == "leader"
     assert not arm.is_connected()
+    assert arm.enable_torque_on_connect is False
+    assert arm.disable_torque_on_disconnect is True

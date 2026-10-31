@@ -53,6 +53,25 @@ class SO101RobotPayload(BaseModel):
         default="",
         description="USB serial number of the robot (when available)",
     )
+    enable_torque_on_connect: bool = Field(
+        default=True,
+        title="Enable torque on connect",
+        description=(
+            "Enable torque when connecting. Defaults to on for followers, off for leaders. "
+            "Accepted actions always enable torque, regardless of this setting."
+        ),
+        json_schema_extra=cast("dict[str, JsonValue]", robot_field_ui({"advanced_configuration": True})),
+    )
+    disable_torque_on_disconnect: bool = Field(
+        default=False,
+        title="Disable torque on disconnect",
+        description=(
+            "Disable torque when disconnecting. Defaults to on for leaders, off for followers. "
+            "When false, the arm holds its current position. Support the arm before disabling torque: "
+            "it can fall under gravity."
+        ),
+        json_schema_extra=cast("dict[str, JsonValue]", robot_field_ui({"advanced_configuration": True})),
+    )
     unit: Literal["normalized", "degrees"] = Field(
         default="normalized",
         title="Joint units",
@@ -122,6 +141,8 @@ class SO101RobotPayload(BaseModel):
                         "bind": {"connection": "connection_string", "serial_number": "serial_number"},
                     },
                     {"kind": "field", "name": "unit"},
+                    {"kind": "field", "name": "enable_torque_on_connect"},
+                    {"kind": "field", "name": "disable_torque_on_disconnect"},
                     {"kind": "calibration", "name": "calibration"},
                 ]),
             },
@@ -142,6 +163,26 @@ class SO101RobotPayload(BaseModel):
             msg = "Either serial_number or connection_string is required for SO101 robots"
             raise ValueError(msg)
         return self
+
+
+class SO101LeaderPayload(SO101RobotPayload):
+    """SO-101 leader configuration with torque-off lifecycle defaults."""
+
+    enable_torque_on_connect: bool = Field(
+        default=False,
+        title="Enable torque on connect",
+        description="Enable torque when connecting. Leader arms remain read-only for teleoperation.",
+        json_schema_extra=cast("dict[str, JsonValue]", robot_field_ui({"advanced_configuration": True})),
+    )
+    disable_torque_on_disconnect: bool = Field(
+        default=True,
+        title="Disable torque on disconnect",
+        description=(
+            "Disable torque when disconnecting. When false, the arm holds its current position. "
+            "Support the arm before disabling torque: it can fall under gravity."
+        ),
+        json_schema_extra=cast("dict[str, JsonValue]", robot_field_ui({"advanced_configuration": True})),
+    )
 
 
 _SO101_TO_URDF = {
@@ -194,13 +235,20 @@ async def _build_so101_driver(robot: CatalogRobot[SO101RobotPayload], factory: C
             "Positions are not normalized and must not be used for policy inference.",
             robot.type,
         )
-        return SO101.uncalibrated(port=port, role=role)
+        return SO101.uncalibrated(
+            port=port,
+            role=role,
+            enable_torque_on_connect=payload.enable_torque_on_connect,
+            disable_torque_on_disconnect=payload.disable_torque_on_disconnect,
+        )
 
     return SO101(
         port=port,
         calibration=SO101Calibration(joints=payload.calibration),
         role=role,
         unit=payload.unit,
+        enable_torque_on_connect=payload.enable_torque_on_connect,
+        disable_torque_on_disconnect=payload.disable_torque_on_disconnect,
     )
 
 
@@ -352,7 +400,7 @@ def _definitions() -> list[RobotCatalogDefinition]:
             display_name="SO101 Leader",
             role="leader",
             robot_builder=_build_so101_driver,
-            robot_payload=SO101RobotPayload,
+            robot_payload=SO101LeaderPayload,
             asset=_SO101_LEADER_ASSET,
             adapter_options=RobotAdapterOptions(goal_time_scale=1.0, external_effort_gain=None),
             probe=_SO101_PROBE,

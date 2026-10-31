@@ -74,6 +74,21 @@ compatibility review. Policies and consumers must expect the selected mixed
 body-degree/gripper-percentage units; normalized policies/previews are not
 automatically converted.
 
+## Torque lifecycle
+
+`SO101` and `SO101.uncalibrated()` accept `enable_torque_on_connect` and
+`disable_torque_on_disconnect`. Both are also available in Studio's single-arm
+advanced configuration. Leave them unset to use role defaults: followers connect
+with torque on and hold position on disconnect; leaders connect with torque off
+and explicitly disable it on disconnect.
+
+For observation-only use, set `enable_torque_on_connect=False` and
+`disable_torque_on_disconnect=True`. Accepted follower actions always enable
+torque after writing the new goal; leaders remain read-only. Setting
+`disable_torque_on_disconnect=False` holds the current position with torque on.
+**Support the arm before disabling torque: it can fall under gravity.**
+The existing `torque_on_disconnect` property remains an inverse compatibility alias.
+
 ## Noninteractive setup
 
 `SO101SetupSession` owns diagnostics, single-motor ID/baudrate assignment, and
