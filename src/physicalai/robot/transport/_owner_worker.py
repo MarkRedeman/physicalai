@@ -464,8 +464,7 @@ def _startup(config: RobotOwnerConfig) -> _Endpoints:
     logger.trace(f"Acquiring ownership locks for {config.name!r}")
 
     try:
-        # TEMPORARY: bypass device locks for cross-driver observation comparisons.
-        locks = acquire_locks(config.name, ())
+        locks = acquire_locks(config.name, device_ids)
     except LockContention as exc:
         if exc.kind == NAME_KIND:
             msg = f"name {config.name!r} is already owned by another process"
