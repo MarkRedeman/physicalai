@@ -187,6 +187,27 @@ wire contract.
 
 ## Owner lifecycle
 
+### Direct connections
+
+Use `claim_devices` when a short-lived setup or calibration flow needs the plain
+driver rather than a shared subscriber. It uses the same host-local device locks
+as shared owners, without spawning a process or opening a transport connection:
+
+```python
+from physicalai.robot.transport import claim_devices
+
+with claim_devices(driver.device_ids):
+    try:
+        driver.connect()
+        observation = driver.get_observation()
+    finally:
+        driver.disconnect()
+```
+
+Acquire the claim before hardware access and retain it until disconnect finishes.
+The helper does not manage driver cleanup or guarantee motion-free connection.
+If cleanup fails, applications must not assume the hardware is safely released.
+
 - One owner process per `name`, and one owner per physical device — both
   enforced by host-local, crash-safe `flock` locks
   (under `$XDG_RUNTIME_DIR/physicalai/robot-locks/` on Linux, or a private

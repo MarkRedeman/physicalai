@@ -23,6 +23,7 @@ Requires the ``transport`` extra::
 
 from __future__ import annotations
 
+from ._claim import claim_devices
 from ._client import SharedRobotClient
 from ._owner_config import DEFAULT_RATE_HZ, RobotOwnerConfig
 from ._owner_worker import OwnerEvent, OwnerExitReason, OwnerResult, run_owner
@@ -36,6 +37,7 @@ __all__ = [
     "RobotOwnerConfig",
     "SharedRobot",
     "SharedRobotClient",
+    "claim_devices",
     "discover_robots",
     "run_owner",
 ]
