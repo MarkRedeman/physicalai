@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling<1.30", "hatch-vcs"]  # cap <1.30: hatchling>=1.30 emits Metadata 2.5, rejected by PyPI/twine (pypi/warehouse#19083)
+build-backend = "hatchling.build"
+
+[project]
+name = "physicalai-openarm-plugin"
+dynamic = ["version"]
+description = "OpenArm SocketCAN followers and leaders, KER exoskeleton leader, and Studio catalog for PhysicalAI"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+classifiers = ["Development Status :: 4 - Beta"]
+dependencies = [
+    "physicalai>=0.3.0",
+    "physicalai-studio-plugin>=0.5.0",
+    "numpy>=1.24",
+    "motorbridge>=0.4.4",
+    "openarm-ker>=0.3.0",
+    "pydantic>=2.0",
+    "python-can>=4.2,<5",
+]
+
+[project.optional-dependencies]
+tests = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/openvinotoolkit/physicalai"
+Repository = "https://github.com/openvinotoolkit/physicalai"
+Issues = "https://github.com/openvinotoolkit/physicalai/issues"
+
+[project.entry-points."physicalai.studio.catalog_plugins"]
+openarm = "physicalai_openarm_plugin.studio_catalog:register_physicalai_studio_plugin"
+
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = '^physicalai-openarm-plugin-v(?P<version>\d+(?:\.\d+)*)$'
+raw-options = { search_parent_directories = true, git_describe_command = "git describe --dirty --tags --long --match physicalai-openarm-plugin-v*" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/physicalai_openarm_plugin"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"urdf" = "urdf"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/physicalai_openarm_plugin/**",
+    "urdf/**",
+    "README.md",
+    "pyproject.toml",
+    "LICENSE",
+]
+exclude = [
+    "examples/**",
+]

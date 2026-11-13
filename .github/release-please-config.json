@@ -51,6 +51,11 @@
       "package-name": "physicalai-stararm-plugin",
       "changelog-path": "CHANGELOG.md"
     },
+    "packages/physicalai-openarm-plugin": {
+      "release-type": "python",
+      "package-name": "physicalai-openarm-plugin",
+      "changelog-path": "CHANGELOG.md"
+    },
     "plugins/robots/physicalai-mujoco-plugin": {
       "release-type": "python",
       "package-name": "physicalai-mujoco-plugin",

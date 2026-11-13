@@ -58,6 +58,7 @@ pip install "physicalai[trossen-plugin]"         # Trossen WidowX robots
 pip install "physicalai[plugin-mujoco]"          # simulated robots (MuJoCo)
 pip install "physicalai[plugin-rebot-b601]"      # Seeed reBot B601
 pip install "physicalai[plugin-stararm]"         # Fashion Star Arm 102
+pip install "physicalai[plugin-openarm]"         # OpenArm and KER exoskeleton
 pip install "physicalai[plugin-so101]"           # single-arm and bimanual SO-101
 ```
 
@@ -179,6 +180,7 @@ More robots ship as first-party plugins. Each plugin README covers setup and usa
 | [SO-101](plugins/robots/physicalai-so101-plugin/README.md)          | Single-arm and bimanual SO-101 drivers, Studio catalog, and URDF assets                                              |
 | [reBot B601](plugins/robots/physicalai-rebot-b601-plugin/README.md) | Seeed reBot B601-DM / B601-RS followers                                                                              |
 | [Star Arm](plugins/robots/physicalai-stararm-plugin/README.md)      | Fashion Star Arm 102 leaders and a follower                                                                          |
+| [OpenArm](packages/physicalai-openarm-plugin/README.md)       | OpenArm SocketCAN followers and leaders, bimanual pairs, and a KER exoskeleton leader                                |
 | [LeRobot](plugins/robots/physicalai-lerobot-plugin/README.md)       | Robots and teleoperators from LeRobot configs                                                                        |
 
 To add your own robot to Physical AI Studio, see the [Studio plugin](plugins/physicalai-studio-plugin/README.md).

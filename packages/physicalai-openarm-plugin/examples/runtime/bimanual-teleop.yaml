@@ -1,0 +1,26 @@
+# Bimanual OpenArm teleoperation: a KER exoskeleton leader drives two follower arms.
+# uv run physicalai run --config packages/physicalai-openarm-plugin/examples/runtime/bimanual-teleop.yaml
+runtime:
+  robot:
+    class_path: physicalai_openarm_plugin.BimanualOpenArmFollower
+    init_args:
+      left:
+        class_path: physicalai_openarm_plugin.OpenArmFollower
+        init_args:
+          port: can1 # CHANGE_ME: left follower SocketCAN interface
+          side: left
+          max_relative_target: 5.0
+      right:
+        class_path: physicalai_openarm_plugin.OpenArmFollower
+        init_args:
+          port: can0 # CHANGE_ME: right follower SocketCAN interface
+          side: right
+          max_relative_target: 5.0
+  action_source:
+    class_path: physicalai.runtime.TeleopSource
+    init_args:
+      leader:
+        class_path: physicalai_openarm_plugin.BimanualOpenArmLeader
+        init_args:
+          transport: usb # or serial, with port: /dev/ttyACM0
+  fps: 30.0
