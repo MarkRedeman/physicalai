@@ -45,7 +45,7 @@ from scservo_sdk import (
 from physicalai.config import export_config
 from physicalai.robot import Robot
 from physicalai.robot.device_ids import device_id_from_serial_port
-from physicalai_so101_plugin._conversion import degrees_to_ticks, ticks_to_degrees, ticks_to_normalized
+from physicalai_so101_plugin._conversion import CalibrationTables
 from physicalai_so101_plugin.calibration import SO101Calibration
 from physicalai_so101_plugin.constants import (
     MAX_SPEED_DEG_S,
@@ -77,7 +77,7 @@ class _SO101Connection:
     group_sync_write_torque: Any
 
 
-@dataclass
+@dataclass(slots=True)
 class SO101Observation:
     """Observation from the SO-101 robot arm.
 
@@ -196,6 +196,13 @@ class SO101(Robot):
             # Explicit uncalibrated mode fallback — assumes canonical 1..6 mapping.
             self.servo_ids = {name: idx for idx, name in enumerate(self.JOINT_ORDER, 1)}
 
+        # Precomputed hot-path constants (built once, not per read/write).
+        self._tables: CalibrationTables | None = (
+            CalibrationTables.from_calibration(self._calibration) if self._calibration is not None else None
+        )
+        self._ordered_servo_ids: tuple[int, ...] = tuple(self.servo_ids[name] for name in self.JOINT_ORDER)
+        self._unit_is_degrees = self._unit == "degrees"
+
         # Connection state (set during connect()) --------------------------
         self._connection: _SO101Connection | None = None
         # Last torque value written on this connection. ``None`` means unknown,
@@ -298,6 +305,7 @@ class SO101(Robot):
     @unit.setter
     def unit(self, value: SO101Unit) -> None:
         self._unit = value
+        self._unit_is_degrees = value == "degrees"
         self._validate_unit()
 
     @property
@@ -380,6 +388,14 @@ class SO101(Robot):
             raise RuntimeError(msg)
         return self._calibration
 
+    def _settle_after_torque(self) -> None:
+        """Settle and drain stale status bytes after a broadcast torque write."""
+        active = self._connection
+        if active is None:
+            return
+        time.sleep(self.SYNC_TORQUE_SETTLE_S)
+        self._clear_input_buffer(active)
+
     def connect(self) -> None:
         """Open the serial port, ping all servos, and configure torque.
 
@@ -456,10 +472,7 @@ class SO101(Robot):
 
             # The broadcast torque write returns before the servos apply it.
             # Settle and drop any status bytes so the first read is clean.
-            active = self._connection
-            if active is not None:
-                time.sleep(self.SYNC_TORQUE_SETTLE_S)
-                self._clear_input_buffer(active)
+            self._settle_after_torque()
         except (OSError, RuntimeError):
             with contextlib.suppress(Exception):
                 port_handler.closePort()
@@ -605,42 +618,41 @@ class SO101(Robot):
         """
         return self._connection is not None
 
+    def _require_tables(self) -> CalibrationTables:
+        """Return the precomputed conversion tables, or raise if uncalibrated.
+
+        Raises:
+            RuntimeError: If the driver was created without calibration.
+        """
+        tables = self._tables
+        if tables is None:
+            msg = (
+                "Calibration is required for tick/unit conversion. "
+                "Provide calibration or avoid conversion methods in uncalibrated mode."
+            )
+            raise RuntimeError(msg)
+        return tables
+
     def _ticks_to_normalized(self, ticks: np.ndarray) -> np.ndarray:
-        return ticks_to_normalized(ticks, self._require_calibration())
+        return self._require_tables().ticks_to_normalized(ticks)
 
     def _ticks_to_unit(self, ticks: np.ndarray, *, unit: SO101Unit | None = None) -> np.ndarray:
         resolved = self._resolve_unit(unit)
         if resolved == "normalized":
-            return self._ticks_to_normalized(ticks)
+            return self._require_tables().ticks_to_normalized(ticks)
         if resolved == "degrees":
-            return ticks_to_degrees(ticks, self._require_calibration())
+            return self._require_tables().ticks_to_degrees(ticks)
         return ticks.astype(np.float32)
 
     def _normalized_to_ticks(self, values: np.ndarray) -> np.ndarray:
-        calibration = self._require_calibration()
-        result = np.empty(self.NUM_JOINTS, dtype=np.int32)
-        for i, name in enumerate(self.JOINT_ORDER):
-            cal = calibration.joints[name]
-            rng = cal.range_max - cal.range_min
-            if rng <= 0:
-                result[i] = int(np.clip(cal.homing_offset, cal.range_min, cal.range_max))
-                continue
-            value = float(values[i])
-            if name == "gripper":
-                clamped = float(np.clip(value, 0.0, 100.0))
-                ticks_val = round(cal.range_min + (clamped / 100.0) * rng)
-            else:
-                clamped = float(np.clip(value, -100.0, 100.0))
-                ticks_val = round(cal.range_min + ((clamped + 100.0) / 200.0) * rng)
-            result[i] = int(np.clip(ticks_val, cal.range_min, cal.range_max))
-        return result
+        return self._require_tables().normalized_to_ticks(values)
 
     def _unit_to_ticks(self, values: np.ndarray, *, unit: SO101Unit | None = None) -> np.ndarray:
         resolved = self._resolve_unit(unit)
         if resolved == "normalized":
-            return self._normalized_to_ticks(values)
+            return self._require_tables().normalized_to_ticks(values)
         if resolved == "degrees":
-            return degrees_to_ticks(values, self._require_calibration())
+            return self._require_tables().degrees_to_ticks(values)
         return np.round(values).astype(np.int32)
 
     def _configure_servos(self) -> None:
@@ -835,22 +847,19 @@ class SO101(Robot):
             raise ConnectionError(msg)
 
         positions = np.empty(self.NUM_JOINTS, dtype=np.int32)
-        for i, name in enumerate(self.JOINT_ORDER):
-            servo_id = self.servo_ids[name]
-            if not conn.group_sync_read.isAvailable(
-                servo_id,
-                STS3215Addr.PRESENT_POSITION,
-                STS3215Len.PRESENT_POSITION,
-            ):
+        group = conn.group_sync_read
+        address = STS3215Addr.PRESENT_POSITION
+        length = STS3215Len.PRESENT_POSITION
+        decode_sign = self._unit_is_degrees
+        for i, servo_id in enumerate(self._ordered_servo_ids):
+            if not group.isAvailable(servo_id, address, length):
+                name = self.JOINT_ORDER[i]
                 msg = f"Servo '{name}' (ID {servo_id}) data not available in sync read"
                 raise ConnectionError(msg)
-            positions[i] = conn.group_sync_read.getData(
-                servo_id,
-                STS3215Addr.PRESENT_POSITION,
-                STS3215Len.PRESENT_POSITION,
-            )
-            if self.unit == "degrees" and positions[i] & 0x8000:
-                positions[i] = -(positions[i] & ~0x8000)
+            value = group.getData(servo_id, address, length)
+            if decode_sign and value & 0x8000:
+                value = -(value & ~0x8000)
+            positions[i] = value
         return positions
 
     def _write_joint_positions(self, ticks: np.ndarray) -> None:
