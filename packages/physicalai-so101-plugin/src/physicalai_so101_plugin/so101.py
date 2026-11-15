@@ -63,7 +63,6 @@ if TYPE_CHECKING:
     from physicalai.robot.interface import RobotObservation
 
 SO101Unit = Literal["ticks", "normalized", "degrees"]
-_TWO_BYTE_REGISTER = 2
 
 
 @dataclass(frozen=True)
@@ -135,6 +134,24 @@ class SO101(Robot):
 
     SYNC_TORQUE_SETTLE_S: ClassVar[float] = 0.02
     """Settle time after a torque sync write before the next bus transaction."""
+
+    _CONFIG_REGISTERS: ClassVar[tuple[tuple[STS3215Addr, int], ...]] = (
+        (STS3215Addr.RETURN_DELAY_TIME, 0),
+        (STS3215Addr.MAXIMUM_ACCELERATION, 254),
+        (STS3215Addr.ACCELERATION, 254),
+        (STS3215Addr.OPERATING_MODE, POSITION_MODE),
+        (STS3215Addr.P_COEFFICIENT, 16),
+        (STS3215Addr.I_COEFFICIENT, 0),
+        (STS3215Addr.D_COEFFICIENT, 32),
+    )
+    """Registers written with the same value to every servo at connect."""
+
+    _GRIPPER_CONFIG_REGISTERS: ClassVar[tuple[tuple[STS3215Addr, int], ...]] = (
+        (STS3215Addr.MAX_TORQUE_LIMIT, 500),
+        (STS3215Addr.PROTECTION_CURRENT, 250),
+        (STS3215Addr.OVERLOAD_TORQUE, 25),
+    )
+    """Extra protection registers written only to the gripper servo."""
 
     def __init__(
         self,
@@ -671,60 +688,41 @@ class SO101(Robot):
 
         self._set_torque(enabled=False)
 
-        for name, servo_id in self.servo_ids.items():
-            SO101._write_register(conn, servo_id, STS3215Addr.RETURN_DELAY_TIME, 0)
-            SO101._write_register(conn, servo_id, STS3215Addr.MAXIMUM_ACCELERATION, 254)
-            SO101._write_register(conn, servo_id, STS3215Addr.ACCELERATION, 254)
-
-            SO101._write_register(conn, servo_id, STS3215Addr.OPERATING_MODE, POSITION_MODE)
-
-            SO101._write_register(conn, servo_id, STS3215Addr.P_COEFFICIENT, 16)
-            SO101._write_register(conn, servo_id, STS3215Addr.I_COEFFICIENT, 0)
-            SO101._write_register(conn, servo_id, STS3215Addr.D_COEFFICIENT, 32)
-
-            if name == "gripper":
-                SO101._write_register(conn, servo_id, STS3215Addr.MAX_TORQUE_LIMIT, 500)
-                SO101._write_register(conn, servo_id, STS3215Addr.PROTECTION_CURRENT, 250)
-                SO101._write_register(conn, servo_id, STS3215Addr.OVERLOAD_TORQUE, 25)
+        all_ids = self._ordered_servo_ids
+        for address, value in self._CONFIG_REGISTERS:
+            self._sync_write_register(conn, address, [(servo_id, value) for servo_id in all_ids])
+        gripper_id = self.servo_ids["gripper"]
+        for address, value in self._GRIPPER_CONFIG_REGISTERS:
+            self._sync_write_register(conn, address, [(gripper_id, value)])
 
     @staticmethod
-    def _write_register(
+    def _sync_write_register(
         conn: _SO101Connection,
-        servo_id: int,
         address: STS3215Addr,
-        value: int,
+        values: list[tuple[int, int]],
     ) -> None:
-        """Write a single register value to a servo.
+        """Write one register to several servos in a single sync-write packet.
 
-        The byte width is derived from :class:`STS3215Len` using
-        the register's name.
-
-        Raises:
-            ValueError: If the register's byte width is not supported.
+        Replaces per-servo addressed writes (which each wait for a status
+        response) with one broadcast packet per register.
         """
-        byte_width = STS3215Len[address.name]
-        if byte_width == 1:
-            comm_result, error = conn.packet_handler.write1ByteTxRx(
-                conn.port_handler,
-                servo_id,
-                address,
-                value,
-            )
-        elif byte_width == _TWO_BYTE_REGISTER:
-            comm_result, error = conn.packet_handler.write2ByteTxRx(
-                conn.port_handler,
-                servo_id,
-                address,
-                value,
-            )
-        else:
-            msg = f"Unsupported byte_width={byte_width} for register write"
-            raise ValueError(msg)
-
+        length = STS3215Len[address.name]
+        param: list[int] = []
+        for servo_id, value in values:
+            param.append(servo_id)
+            if length == 1:
+                param.append(value & 0xFF)
+            else:
+                param.extend((value & 0xFF, (value >> 8) & 0xFF))
+        comm_result = conn.packet_handler.syncWriteTxOnly(
+            conn.port_handler,
+            int(address),
+            length,
+            param,
+            len(param),
+        )
         if comm_result != 0:
-            logger.warning(f"Register write failed: addr={address} servo={servo_id} comm={comm_result}")
-        if error != 0:
-            logger.warning(f"Register write error: addr={address} servo={servo_id} err={error}")
+            logger.warning(f"Sync config write to {address.name} failed with comm result {comm_result}")
 
     @staticmethod
     def _sync_read_parameter_error(servo_id: int) -> ConnectionError:

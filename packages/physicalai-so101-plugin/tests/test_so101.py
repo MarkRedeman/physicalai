@@ -61,6 +61,14 @@ def _make_mock_sdk() -> MagicMock:
 
     packet_handler.write1ByteTxRx.side_effect = _write1
     packet_handler.write2ByteTxRx.return_value = (0, 0)
+
+    def _sync_write_tx_only(
+        _port: Any, address: int, data_length: int, param: list[int], _length: int
+    ) -> int:
+        sdk.call_order.append(("sync_write", int(address), int(data_length), tuple(param)))
+        return 0
+
+    packet_handler.syncWriteTxOnly.side_effect = _sync_write_tx_only
     sdk.PacketHandler.return_value = packet_handler
 
     # GroupSyncRead
@@ -394,20 +402,6 @@ class TestSO101Lifecycle:
 class TestSO101ServoConfiguration:
     """Tests for _configure_servos() called during connect()."""
 
-    def _get_write_calls(self, mock_sdk: MagicMock) -> tuple[list, list]:
-        """Return (write1Byte_calls, write2Byte_calls) from packet_handler."""
-        ph = mock_sdk.PacketHandler.return_value
-        return ph.write1ByteTxRx.call_args_list, ph.write2ByteTxRx.call_args_list
-
-    def _extract_register_writes(self, calls: list, address: int) -> list[tuple[int, int]]:
-        """Extract (servo_id, value) pairs for writes to a specific address."""
-        results = []
-        for c in calls:
-            args = c.args if c.args else c[0]
-            if args[2] == address:
-                results.append((args[1], args[3]))
-        return results
-
     def test_torque_disabled_before_config_writes(self, mock_sdk: MagicMock) -> None:
         """Torque is disabled before any configuration registers are written."""
         robot = _create_robot(mock_sdk, role="follower")
@@ -419,10 +413,13 @@ class TestSO101ServoConfiguration:
             for index, event in enumerate(events)
             if event[0] == "sync_add" and event[1] == TORQUE_ADDR
         )
-        first_register_index = next(
-            index for index, event in enumerate(events) if event[0] == "write1"
+        # RETURN_DELAY_TIME (7) is the first configuration register written.
+        first_config_index = next(
+            index
+            for index, event in enumerate(events)
+            if event[0] == "sync_write" and event[1] == 7
         )
-        assert torque_index < first_register_index
+        assert torque_index < first_config_index
         assert events[torque_index][3] == (0,)
 
     def test_operating_mode_set_to_position(self, mock_sdk: MagicMock) -> None:
@@ -430,31 +427,31 @@ class TestSO101ServoConfiguration:
         robot = _create_robot(mock_sdk, role="follower")
         robot.connect()
 
-        calls_1byte, _ = self._get_write_calls(mock_sdk)
-        mode_writes = self._extract_register_writes(calls_1byte, 33)
+        mode_writes = [
+            event
+            for event in mock_sdk.call_order
+            if event[0] == "sync_write" and event[1] == 33
+        ]
 
-        assert len(mode_writes) == 6
-        assert all(val == 0 for _, val in mode_writes)
+        assert len(mode_writes) == 1
+        _, _address, length, param = mode_writes[0]
+        assert length == 1
+        assert param == (1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0)
 
     def test_gripper_protection_written_only_for_gripper(self, mock_sdk: MagicMock) -> None:
         """Gripper protection registers are written only to the gripper servo (ID 6)."""
         robot = _create_robot(mock_sdk, role="follower")
         robot.connect()
 
-        calls_1byte, calls_2byte = self._get_write_calls(mock_sdk)
+        writes = {
+            event[1]: event
+            for event in mock_sdk.call_order
+            if event[0] == "sync_write"
+        }
 
-        # 2-byte writes: MAX_TORQUE_LIMIT (addr 16) and PROTECTION_CURRENT (addr 28)
-        torque_limit_writes = self._extract_register_writes(calls_2byte, 16)
-        current_writes = self._extract_register_writes(calls_2byte, 28)
-        # 1-byte write: OVERLOAD_TORQUE (addr 36)
-        overload_writes = self._extract_register_writes(calls_1byte, 36)
-
-        assert len(torque_limit_writes) == 1
-        assert torque_limit_writes[0] == (6, 500)
-        assert len(current_writes) == 1
-        assert current_writes[0] == (6, 250)
-        assert len(overload_writes) == 1
-        assert overload_writes[0] == (6, 25)
+        assert writes[16][2:] == (2, (6, 244, 1))  # 500, little-endian
+        assert writes[28][2:] == (2, (6, 250, 0))  # 250, little-endian
+        assert writes[36][2:] == (1, (6, 25))
 
 
 # ---------------------------------------------------------------------------
