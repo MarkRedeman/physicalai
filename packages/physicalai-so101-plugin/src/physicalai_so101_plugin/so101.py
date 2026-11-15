@@ -650,9 +650,6 @@ class SO101(Robot):
             raise RuntimeError(msg)
         return tables
 
-    def _ticks_to_normalized(self, ticks: np.ndarray) -> np.ndarray:
-        return self._require_tables().ticks_to_normalized(ticks)
-
     def _ticks_to_unit(self, ticks: np.ndarray, *, unit: SO101Unit | None = None) -> np.ndarray:
         resolved = self._resolve_unit(unit)
         if resolved == "normalized":
@@ -660,9 +657,6 @@ class SO101(Robot):
         if resolved == "degrees":
             return self._require_tables().ticks_to_degrees(ticks)
         return ticks.astype(np.float32)
-
-    def _normalized_to_ticks(self, values: np.ndarray) -> np.ndarray:
-        return self._require_tables().normalized_to_ticks(values)
 
     def _unit_to_ticks(self, values: np.ndarray, *, unit: SO101Unit | None = None) -> np.ndarray:
         resolved = self._resolve_unit(unit)
