@@ -263,15 +263,16 @@ class TestSO101Construction:
 class TestSO101Lifecycle:
     """Tests for connect() and disconnect()."""
 
-    def test_connect_opens_port_and_pings(self, mock_sdk: MagicMock) -> None:
-        """connect() opens port, sets baudrate, pings servos, configures torque."""
+    def test_connect_opens_port_and_discovers_servos(self, mock_sdk: MagicMock) -> None:
+        """connect() opens the port and discovers servos with one sync read."""
         robot = _create_robot(mock_sdk)
         robot.connect()
 
         mock_sdk.PortHandler.return_value.openPort.assert_called_once()
         mock_sdk.PortHandler.return_value.setBaudRate.assert_called_once_with(1_000_000)
-        # 6 servos pinged
-        assert mock_sdk.PacketHandler.return_value.ping.call_count == 6
+        # The model-number sync read replaces six individual pings.
+        mock_sdk.PacketHandler.return_value.ping.assert_not_called()
+        assert mock_sdk.GroupSyncRead.call_count >= 2
 
     def test_connect_is_idempotent(self, mock_sdk: MagicMock) -> None:
         """Calling connect() twice does not re-open the port."""
@@ -377,7 +378,8 @@ class TestSO101Lifecycle:
             robot.connect()
 
     def test_servo_ping_failure_raises(self, mock_sdk: MagicMock) -> None:
-        """ConnectionError if a servo doesn't respond."""
+        """ConnectionError if a servo doesn't respond, even via the fallback."""
+        mock_sdk.GroupSyncRead.return_value.isAvailable.return_value = False
         mock_sdk.PacketHandler.return_value.ping.return_value = (0, 1, 0)
         robot = _create_robot(mock_sdk)
 

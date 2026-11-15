@@ -734,12 +734,18 @@ class SO101(Robot):
         return ConnectionError(f"Failed to add servo {servo_id} to sync read group")
 
     def _ping_servos(self) -> None:
-        """Ping every servo and raise on failure.
+        """Discover servos with one model-number sync read.
+
+        Falls back to individual pings when the sync read fails so the error
+        still names the missing servo.
 
         Raises:
             ConnectionError: If a servo does not respond.
         """
         conn = self._require_connection()
+
+        if self._sync_read_model_numbers(conn):
+            return
 
         for name, servo_id in self.servo_ids.items():
             _, comm_result, error = conn.packet_handler.ping(conn.port_handler, servo_id)
@@ -748,6 +754,28 @@ class SO101(Robot):
                 raise ConnectionError(msg)
             if error != 0:
                 logger.warning(f"Servo '{name}' (ID {servo_id}) returned error: {error}")
+
+    def _sync_read_model_numbers(self, conn: _SO101Connection) -> bool:
+        """Read every servo's model number in one sync-read transaction.
+
+        Returns:
+            ``True`` when every expected servo replied; ``False`` otherwise.
+        """
+        group = GroupSyncRead(
+            conn.port_handler,
+            conn.packet_handler,
+            STS3215Addr.MODEL_NUMBER,
+            STS3215Len.MODEL_NUMBER,
+        )
+        for servo_id in self._ordered_servo_ids:
+            if not group.addParam(servo_id):
+                return False
+        if group.txRxPacket() != 0:
+            return False
+        return all(
+            group.isAvailable(servo_id, STS3215Addr.MODEL_NUMBER, STS3215Len.MODEL_NUMBER)
+            for servo_id in self._ordered_servo_ids
+        )
 
     @staticmethod
     def _clear_input_buffer(conn: _SO101Connection) -> None:
