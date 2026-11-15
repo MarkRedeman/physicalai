@@ -553,9 +553,9 @@ class TestSO101Action:
         action = np.zeros(6, dtype=np.float32)
         robot.send_action(action)
 
-        # Torque is re-sent after every action at this stage.
+        # Torque is already enabled from connect(), so only the goal is written.
         goal.txPacket.assert_called_once()
-        torque.txPacket.assert_called_once()
+        torque.txPacket.assert_not_called()
 
     def test_action_enables_torque_after_writing_goal(self, mock_sdk: MagicMock) -> None:
         robot = _create_robot(mock_sdk, enable_torque_on_connect=False)
