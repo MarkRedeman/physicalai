@@ -140,3 +140,28 @@ def test_restored_adapter_rediscovers_keys(adapter_and_device: tuple[Any, FakeDe
     assert restored.joint_names == ["new"]
     assert observation.sensor_data is None
     np.testing.assert_array_equal(observation.joint_positions, [7.0])
+
+
+def test_joint_key_membership_is_reused(adapter_and_device: tuple[Any, FakeDevice]) -> None:
+    adapter, _ = adapter_and_device
+    keys = adapter._position_key_set
+    assert keys == frozenset({"a.pos", "z.pos"})
+    adapter.get_observation()
+    adapter.get_observation()
+    assert adapter._position_key_set is keys
+
+
+@pytest.mark.parametrize("keys", [["elbow_position", "gripperpos"], []])
+def test_fallback_and_empty_joint_keys(adapter_and_device: tuple[Any, FakeDevice], keys: list[str]) -> None:
+    adapter, device = adapter_and_device
+    device.values = dict.fromkeys(keys, 1.0)
+    device.observation_features = dict(device.values)
+    device.action_features = dict(device.values)
+    keyword = "_robot" if isinstance(adapter, LeRobotAdapter) else "_teleoperator"
+    rebuilt = type(adapter)("fake", {}, role="follower", **{keyword: device})
+    observation = rebuilt.get_observation()
+    assert observation.sensor_data is None
+    assert observation.joint_positions.shape == (len(keys),)
+    assert rebuilt._position_key_set == frozenset(keys)
+    rebuilt.send_action(np.zeros(len(keys)))
+    assert device.commands == [dict.fromkeys(keys, 0.0)]

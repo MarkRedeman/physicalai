@@ -236,6 +236,7 @@ class LeRobotAdapter:
         self._joint_order: list[str] | None = None
         self._obs_position_keys: list[str] | None = None
         self._act_position_keys: list[str] | None = None
+        self._position_key_set: frozenset[str] = frozenset()
         self._num_joints: int | None = None
         self._image_sequences: dict[str, int] = {}
 
@@ -277,6 +278,7 @@ class LeRobotAdapter:
         self._joint_order = None
         self._obs_position_keys = None
         self._act_position_keys = None
+        self._position_key_set = frozenset()
         self._num_joints = None
         self._image_sequences = {}
 
@@ -315,6 +317,8 @@ class LeRobotAdapter:
         self._num_joints = len(self._joint_order)
         self._obs_position_keys = list(pos_keys)
         self._act_position_keys = list(pos_keys)
+        # Joint keys stay fixed after discovery; auxiliary keys can change per read.
+        self._position_key_set = frozenset(pos_keys)
 
     def _require_joint_order(self) -> None:
         """Raise if joint order has not been discovered yet.
@@ -434,18 +438,16 @@ class LeRobotAdapter:
             raise ConnectionError(msg)
         lerobot_obs = robot.get_observation()
         self._ensure_joint_order(lerobot_obs)
-        self._require_joint_order()
 
-        obs_keys, act_keys = self._require_position_keys()
+        obs_keys, _ = self._require_position_keys()
 
         positions = np.array([lerobot_obs[key] for key in obs_keys], dtype=np.float32)
 
         sensor_data: dict[str, np.ndarray] = {}
         images: dict[str, Frame] = {}
-        obs_key_set = set(obs_keys)
-        act_key_set = set(act_keys)
+        position_keys = self._position_key_set
         for key, value in lerobot_obs.items():
-            if key in obs_key_set or key in act_key_set:
+            if key in position_keys:
                 continue
             if isinstance(value, np.ndarray) and value.ndim >= _DIM_THRESHOLD_IMAGE:
                 sequence = self._image_sequences.get(key, 0)
@@ -544,6 +546,7 @@ class LeRobotTeleoperatorAdapter:
         self._teleoperator: _TeleoperatorLike | None = cast("_TeleoperatorLike | None", _teleoperator)
         self._joint_order: list[str] | None = None
         self._action_position_keys: list[str] | None = None
+        self._position_key_set: frozenset[str] = frozenset()
         self._num_joints: int | None = None
         self._image_sequences: dict[str, int] = {}
 
@@ -584,6 +587,7 @@ class LeRobotTeleoperatorAdapter:
         self._teleoperator = None
         self._joint_order = None
         self._action_position_keys = None
+        self._position_key_set = frozenset()
         self._num_joints = None
         self._image_sequences = {}
 
@@ -620,6 +624,7 @@ class LeRobotTeleoperatorAdapter:
         self._joint_order = [_strip_position_suffix(k) for k in action_keys]
         self._num_joints = len(self._joint_order)
         self._action_position_keys = action_keys
+        self._position_key_set = frozenset(action_keys)
 
     def _require_joint_order(self) -> None:
         if self._joint_order is None:
@@ -740,16 +745,15 @@ class LeRobotTeleoperatorAdapter:
             raise ConnectionError(msg)
         action = teleop.get_action()
         self._ensure_joint_order(action)
-        self._require_joint_order()
 
         action_keys = self._require_action_keys()
         positions = np.array([action[key] for key in action_keys], dtype=np.float32)
 
         sensor_data: dict[str, np.ndarray] = {}
         images: dict[str, Frame] = {}
-        key_set = set(action_keys)
+        position_keys = self._position_key_set
         for key, value in action.items():
-            if key in key_set:
+            if key in position_keys:
                 continue
             if isinstance(value, np.ndarray) and value.ndim >= _DIM_THRESHOLD_IMAGE:
                 sequence = self._image_sequences.get(key, 0)
