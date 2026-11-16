@@ -669,6 +669,8 @@ The native MuJoCo viewer also binds **`n`** (next scene) to cycle through the co
 
 ## Development
 
+See [PERFORMANCE.md](PERFORMANCE.md) for asset-free CPU benchmarks, measured control-tick improvements and validation limits.
+
 To run the plugin from a checkout, fetch the LFS assets and prefix the commands in this README with `uv run --package physicalai-mujoco-plugin`. From the repository root:
 
 ```bash
