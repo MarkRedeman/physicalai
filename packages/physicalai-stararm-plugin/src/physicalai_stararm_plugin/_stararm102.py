@@ -182,7 +182,8 @@ class _StarArm102:
             raise
 
         self._reset_samples()
-        logger.info(f"{self.__class__.__name__} connected on {self.port}")
+        sync_angles = callable(getattr(bus, "set_angles", None))
+        logger.info(f"{self.__class__.__name__} connected on {self.port} (sync angle writes: {sync_angles})")
 
     def disconnect(self) -> None:
         """Close the UART bus and release resources."""
@@ -319,6 +320,18 @@ class _StarArm102:
             raise ValueError(msg)
 
         interval_ms = self._goal_time_to_interval_ms(goal_time)
+        sync_write = getattr(bus, "set_angles", None)
+        if callable(sync_write):
+            servo_ids = [STAR_ARM_102_JOINT_IDS[name] for name in self.JOINT_ORDER]
+            targets = [
+                _clip_degrees(float(action_arr[i]), *STAR_ARM_102_JOINT_RANGES_DEG[name])
+                for i, name in enumerate(self.JOINT_ORDER)
+            ]
+            # Batch-capable SDKs preserve the individual command fields. Never
+            # fall back after failure: the packet could already be partly sent.
+            sync_write(servo_ids, targets, multi_turn=True, interval_ms=interval_ms)
+            return
+
         for i, name in enumerate(self.JOINT_ORDER):
             servo_id = STAR_ARM_102_JOINT_IDS[name]
             range_min, range_max = STAR_ARM_102_JOINT_RANGES_DEG[name]

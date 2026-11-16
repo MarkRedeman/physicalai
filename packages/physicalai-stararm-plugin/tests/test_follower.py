@@ -30,6 +30,7 @@ class _StararmPackageModule:
 def _make_mock_smart_servo() -> MagicMock:
     module = MagicMock()
     bus = MagicMock()
+    bus.set_angles = None  # The released 0.0.4 SDK has no batch operation.
     module.FashionStarServo.return_value = bus
     bus.ping.return_value = True
 

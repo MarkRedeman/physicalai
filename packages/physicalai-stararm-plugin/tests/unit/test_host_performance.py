@@ -27,6 +27,12 @@ def _robot() -> Any:
     ).StarArm102FLFollower()
 
 
+def _legacy_bus() -> MagicMock:
+    bus = MagicMock()
+    bus.set_angles = None
+    return bus
+
+
 def _assert_same_float32(actual: np.ndarray, expected: np.ndarray) -> None:
     assert actual.dtype == expected.dtype == np.float32
     np.testing.assert_array_equal(actual, expected)
@@ -78,7 +84,7 @@ def test_action_matches_original_scalar_clipping(dtype: type) -> None:
     )
 
     robot = _robot()
-    bus = MagicMock()
+    bus = _legacy_bus()
     robot._bus = bus
     rng = np.random.default_rng(123)
     for _ in range(100):
@@ -103,7 +109,7 @@ def test_action_matches_original_scalar_clipping(dtype: type) -> None:
 
 def test_action_preserves_nonfinite_values_and_signed_zero() -> None:
     robot = _robot()
-    robot._bus = MagicMock()
+    robot._bus = _legacy_bus()
     robot.send_action(
         np.array([np.nan, np.inf, -np.inf, -0.0, 0.0, -0.0, -0.0], dtype=np.float32)
     )
@@ -146,7 +152,7 @@ def test_b601_profile_matches_original_scalar_math() -> None:
 
 def test_write_failure_keeps_addressed_prefix_and_propagates() -> None:
     robot = _robot()
-    robot._bus = MagicMock()
+    robot._bus = _legacy_bus()
     robot._bus.set_angle.side_effect = [None, None, OSError("write failed")]
     with pytest.raises(OSError, match="write failed"):
         robot.send_action(np.zeros(7))
