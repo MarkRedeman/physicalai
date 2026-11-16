@@ -38,7 +38,7 @@ def _clip_degrees(value: float, lower: float, upper: float) -> float:
     # NumPy releases differ in signed-zero handling at zero bounds. Delegate
     # that rare boundary case rather than changing the supported numeric API.
     # Exact zero, not approximate equality, selects the signed-zero case.
-    if value == 0.0 and (lower == 0.0 or upper == 0.0):  # ruff: ignore[float-equality-comparison]
+    if value == 0.0 and (lower == 0.0 or upper == 0.0):  # ruff: ignore[RUF069]
         return float(np.clip(value, lower, upper))
     if value < lower:
         return lower
@@ -299,7 +299,7 @@ class _StarArm102:
 
         return positions, raw_positions, reliable
 
-    def _observation_positions(self, positions: np.ndarray) -> np.ndarray:  # ruff: ignore[no-self-use]
+    def _observation_positions(self, positions: np.ndarray) -> np.ndarray:  # ruff: ignore[PLR6301]
         """Convert native positions to this variant's public observation frame.
 
         Returns:

@@ -158,7 +158,7 @@ def ticks_to_degrees(ticks: np.ndarray, calibration: SO101Calibration) -> np.nda
 
     Raises:
         ValueError: If a recorded range has no positive span.
-    """  # ruff: ignore[docstring-extraneous-exception] - the delegated table method raises ValueError.
+    """  # ruff: ignore[DOC502] - the delegated table method raises ValueError.
     return CalibrationTables.from_calibration(calibration).ticks_to_degrees(ticks)
 
 
@@ -173,5 +173,5 @@ def degrees_to_ticks(values: np.ndarray, calibration: SO101Calibration) -> np.nd
 
     Raises:
         ValueError: If a recorded range has no positive span or inputs are not finite.
-    """  # ruff: ignore[docstring-extraneous-exception] - the delegated table method raises ValueError.
+    """  # ruff: ignore[DOC502] - the delegated table method raises ValueError.
     return CalibrationTables.from_calibration(calibration).degrees_to_ticks(values)
