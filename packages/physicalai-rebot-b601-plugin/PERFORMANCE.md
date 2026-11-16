@@ -155,16 +155,16 @@ ownership, and reentrant calls on the same model. Existing driver tests still
 cover motion shaping, dropout detection, gripper limits/stalls, park/release,
 connection cleanup and error handling.
 
-Focused checks, from the root (Ruff 0.17.5, Pyrefly 1.4.1):
+Checks from the root (repository-pinned Ruff 0.15.12, Pyrefly 1.4.1):
 
 ```bash
 GRAVITY="$PKG/src/physicalai_rebot_b601_plugin/gravity.py"
 BENCH="$PKG/benchmarks/benchmark_cpu.py"
 TEST="$PKG/tests/unit/test_gravity_performance.py"
-uv run --no-project "$SHARED/bin/ruff" check "$GRAVITY"
-uv run --no-project "$SHARED/bin/ruff" check --select E,F,I,UP \
+uv tool run --from ruff==0.15.12 ruff check "$PKG/src"
+uv tool run --from ruff==0.15.12 ruff check --select E,F,I,UP \
   --config 'include=["*.py"]' --config 'extend-exclude=[]' "$BENCH" "$TEST"
-uv run --no-project "$SHARED/bin/ruff" format --check \
+uv tool run --from ruff==0.15.12 ruff format --check \
   --config 'include=["*.py"]' --config 'extend-exclude=[]' "$GRAVITY" "$BENCH" "$TEST"
 uv run --no-project "$SHARED/bin/pyrefly" check \
   --python-interpreter-path "$SHARED/bin/python" \
@@ -172,13 +172,13 @@ uv run --no-project "$SHARED/bin/pyrefly" check \
 git diff --check
 ```
 
-Changed production source passes all configured Ruff checks; benchmark/tests
+The entire package source passes all configured pinned Ruff checks; benchmark/tests
 pass the explicit selection (repository defaults exclude tests/benchmarks).
 All three files pass formatting. Focused Pyrefly reports **0 errors**, with one
-missing-defusedxml-stubs warning. Package-wide source Ruff reports **15 existing
-diagnostics** in untouched files (14 deprecated `noqa` comments and one oversized
-try block); this work leaves them unchanged. No shared lockfile/environment was
-modified and no heavy optional SDK was installed.
+missing-defusedxml-stubs warning. The initial check with shared Ruff 0.17.5
+reported 15 diagnostics in untouched files; these are not failures under the
+repository-pinned Ruff 0.15.12. Existing numeric suppression IDs remain unchanged.
+No shared lockfile/environment was modified and no heavy optional SDK was installed.
 
 ## Limits and future hardware validation
 
