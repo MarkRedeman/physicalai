@@ -10,8 +10,10 @@ import json
 import sys
 import time
 from collections import Counter
+from collections.abc import Callable
+from functools import partial
 from types import ModuleType, SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -30,6 +32,24 @@ from physicalai_rebot_b601_plugin.constants import (  # noqa: E402
 from physicalai_rebot_b601_plugin.dm import ReBotB601DM  # noqa: E402
 from physicalai_rebot_b601_plugin.gravity import GravityModel  # noqa: E402
 from physicalai_rebot_b601_plugin.rs import ReBotB601RS  # noqa: E402
+
+if TYPE_CHECKING:
+    from physicalai_rebot_b601_plugin.gravity import _ActiveJoint
+
+
+class ReferenceGravityModel(GravityModel):
+    """Original NumPy kernel for paired comparisons in the same process."""
+
+    def _add_holding_torque(
+        self,
+        torques: np.ndarray,
+        link: str,
+        com_world: np.ndarray,
+        above: tuple[_ActiveJoint, ...],
+    ) -> None:
+        weight = self._links[link][0] * self._gravity
+        for joint in above:
+            torques[joint.index] -= float(np.dot(np.cross(joint.axis, com_world - joint.anchor), weight))
 
 
 class FakeMotor:
@@ -67,7 +87,7 @@ class FakeController:
         self.counts["poll_feedback_once"] += 1
 
 
-def make_robot(variant: str) -> tuple[Any, Counter[str]]:
+def make_robot(variant: str, *, reference: bool = False) -> tuple[Any, Counter[str]]:
     """Attach only inert fakes; skip connect, enable, park, and disconnect entirely."""
     counts: Counter[str] = Counter()
     cls = ReBotB601RS if variant == "rs" else ReBotB601DM
@@ -77,21 +97,31 @@ def make_robot(variant: str) -> tuple[Any, Counter[str]]:
     robot._controller = FakeController(counts)
     robot._motors = {name: FakeMotor(counts) for name in robot.JOINT_ORDER}
     robot._gravity()  # Parse outside timing, as connect does for MIT mode.
+    if reference:
+        robot._gravity_model = ReferenceGravityModel(get_urdf_path() / robot.GRAVITY_URDF, REBOT_B601_URDF_ARM_JOINTS)
     return robot, counts
 
 
-def measure(operation: Any, iterations: int, repeats: int) -> dict[str, float]:
-    for _ in range(100):
-        operation()
-    samples = []
-    means = []
-    for _ in range(repeats):
-        start = time.perf_counter_ns()
-        for _ in range(iterations):
-            before = time.perf_counter_ns()
+def measure(operations: dict[str, Callable[[], Any]], iterations: int, repeats: int) -> dict[str, Any]:
+    for operation in operations.values():
+        for _ in range(100):
             operation()
-            samples.append((time.perf_counter_ns() - before) / 1000.0)
-        means.append((time.perf_counter_ns() - start) / iterations / 1000.0)
+    samples: dict[str, list[float]] = {name: [] for name in operations}
+    means: dict[str, list[float]] = {name: [] for name in operations}
+    for repeat in range(repeats):
+        order = list(operations) if repeat % 2 == 0 else list(reversed(operations))
+        for name in order:
+            operation = operations[name]
+            start = time.perf_counter_ns()
+            for _ in range(iterations):
+                before = time.perf_counter_ns()
+                operation()
+                samples[name].append((time.perf_counter_ns() - before) / 1000.0)
+            means[name].append((time.perf_counter_ns() - start) / iterations / 1000.0)
+    return {name: summarize(means[name], samples[name]) for name in operations}
+
+
+def summarize(means: list[float], samples: list[float]) -> dict[str, float]:
     return {
         "mean_us": float(np.mean(means)),
         "repeat_std_us": float(np.std(means, ddof=1)),
@@ -105,22 +135,46 @@ def main() -> None:
     parser.add_argument("--iterations", type=int, default=1000)
     parser.add_argument("--repeats", type=int, default=7)
     args = parser.parse_args()
+    if args.iterations < 1 or args.repeats < 2:
+        parser.error("--iterations must be positive and --repeats must be at least 2")
     results = {}
     q = np.array([0.3, -1.5, -0.5, 0.4, 0.2, 0.1])
     for variant, urdf in (("dm", REBOT_B601_DM_GRAVITY_URDF), ("rs", REBOT_B601_RS_GRAVITY_URDF)):
         model = GravityModel(get_urdf_path() / urdf, REBOT_B601_URDF_ARM_JOINTS)
-        results[f"gravity-{variant}"] = measure(lambda: model.torques(q), args.iterations, args.repeats)
+        reference = ReferenceGravityModel(get_urdf_path() / urdf, REBOT_B601_URDF_ARM_JOINTS)
+        results[f"gravity-{variant}"] = measure(
+            {"original": partial(reference.torques, q), "optimized": partial(model.torques, q)},
+            args.iterations,
+            args.repeats,
+        )
     for variant in ("dm", "dm-mit", "rs"):
-        robot, counts = make_robot(variant)
+        original, original_counts = make_robot(variant, reference=True)
+        optimized, optimized_counts = make_robot(variant)
         action = np.zeros(7)
-        for scenario, operation in (("read", robot.get_observation), ("write", lambda: robot.send_action(action))):
-            results[f"{variant}-{scenario}"] = measure(operation, args.iterations, args.repeats)
-            # Precondition for a steady-state single-call snapshot; exclude timed setup/refresh counts.
-            if variant == "rs" and scenario == "write":
-                robot._gripper_limit_written_at = time.monotonic()
-            counts.clear()
-            operation()
-            results[f"{variant}-{scenario}"]["fake_calls"] = dict(counts)
+        for scenario in ("read", "write"):
+            operations = (
+                {"original": original.get_observation, "optimized": optimized.get_observation}
+                if scenario == "read"
+                else {
+                    "original": partial(original.send_action, action),
+                    "optimized": partial(optimized.send_action, action),
+                }
+            )
+            result = measure(operations, args.iterations, args.repeats)
+            for name, robot, counts in (
+                ("original", original, original_counts),
+                ("optimized", optimized, optimized_counts),
+            ):
+                # Exclude setup/refresh counts from this steady-state single-call snapshot.
+                if variant == "rs" and scenario == "write":
+                    robot._gripper_limit_written_at = time.monotonic()
+                counts.clear()
+                operations[name]()
+                result[name]["fake_calls"] = dict(counts)
+            if result["original"]["fake_calls"] != result["optimized"]["fake_calls"]:
+                msg = f"Changed SDK call budget for {variant}-{scenario}"
+                raise RuntimeError(msg)
+            results[f"{variant}-{scenario}"] = result
     print(json.dumps(results, indent=2))
 
 

@@ -240,10 +240,18 @@ class GravityModel:
         above: tuple[_ActiveJoint, ...],
     ) -> None:
         """Add the torque each joint in ``above`` needs to hold ``link``'s weight at ``com_world``."""
-        weight = self._links[link][0] * self._gravity
+        weight_x, weight_y, weight_z = (self._links[link][0] * self._gravity).tolist()
         for joint in above:
             # Gravity's generalised force on the joint; holding it takes the opposite torque.
-            torques[joint.index] -= float(np.dot(np.cross(joint.axis, com_world - joint.anchor), weight))
+            # Expand the 3-vector scalar triple product: generic np.cross dispatch and temporary
+            # arrays dominate this small calculation, repeated for every loaded link/ancestor pair.
+            axis = joint.axis.tolist()
+            lever = (com_world - joint.anchor).tolist()
+            torques[joint.index] -= (
+                (axis[1] * lever[2] - axis[2] * lever[1]) * weight_x
+                + (axis[2] * lever[0] - axis[0] * lever[2]) * weight_y
+                + (axis[0] * lever[1] - axis[1] * lever[0]) * weight_z
+            )
 
 
 __all__ = ["STANDARD_GRAVITY", "GravityModel"]
