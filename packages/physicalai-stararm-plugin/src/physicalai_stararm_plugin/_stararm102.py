@@ -29,6 +29,24 @@ _GLITCH_JUMP_DEG = 90.0
 _GLITCH_MAX_HELD_SAMPLES = 3
 
 
+def _clip_degrees(value: float, lower: float, upper: float) -> float:
+    """Clip a scalar to finite joint bounds without NumPy dispatch overhead.
+
+    Returns:
+        Clipped degrees, retaining NumPy's signed-zero and NaN behavior.
+    """
+    # NumPy releases differ in signed-zero handling at zero bounds. Delegate
+    # that rare boundary case rather than changing the supported numeric API.
+    # Exact zero, not approximate equality, selects the signed-zero case.
+    if value == 0.0 and (lower == 0.0 or upper == 0.0):  # ruff: ignore[float-equality-comparison]
+        return float(np.clip(value, lower, upper))
+    if value < lower:
+        return lower
+    if value > upper:
+        return upper
+    return value
+
+
 class _ServoMonitor(Protocol):
     angle_deg: float
     reliable: bool
@@ -264,7 +282,7 @@ class _StarArm102:
                 raise ConnectionError(msg)
             range_min, range_max = STAR_ARM_102_JOINT_RANGES_DEG[name]
             unwrapped, _ = self._round_to_valid_range(float(monitor.angle_deg), range_min, range_max)
-            positions[i] = float(np.clip(unwrapped, range_min, range_max))
+            positions[i] = _clip_degrees(unwrapped, range_min, range_max)
             raw_positions[i] = float(monitor.angle_deg)
             reliable[i] = 1.0 if monitor.reliable else 0.0
 
@@ -281,7 +299,7 @@ class _StarArm102:
 
         return positions, raw_positions, reliable
 
-    def _observation_positions(self, positions: np.ndarray) -> np.ndarray:  # ruff: ignore[PLR6301]
+    def _observation_positions(self, positions: np.ndarray) -> np.ndarray:  # ruff: ignore[no-self-use]
         """Convert native positions to this variant's public observation frame.
 
         Returns:
@@ -304,7 +322,7 @@ class _StarArm102:
         for i, name in enumerate(self.JOINT_ORDER):
             servo_id = STAR_ARM_102_JOINT_IDS[name]
             range_min, range_max = STAR_ARM_102_JOINT_RANGES_DEG[name]
-            target = float(np.clip(float(action_arr[i]), range_min, range_max))
+            target = _clip_degrees(float(action_arr[i]), range_min, range_max)
             bus.set_angle(servo_id, target, multi_turn=True, interval_ms=interval_ms)
 
     def _goal_time_to_interval_ms(self, goal_time: float) -> int:

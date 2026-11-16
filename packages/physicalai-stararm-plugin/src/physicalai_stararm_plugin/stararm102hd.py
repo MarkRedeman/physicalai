@@ -11,7 +11,7 @@ from typing import ClassVar, Literal
 import numpy as np
 
 from physicalai.config import export_config
-from physicalai_stararm_plugin._stararm102 import _StarArm102, _StarArm102Observation
+from physicalai_stararm_plugin._stararm102 import _clip_degrees, _StarArm102, _StarArm102Observation
 from physicalai_stararm_plugin.constants import (
     STAR_ARM_102_B601_FOLLOWER_DIRECTIONS,
     STAR_ARM_102_B601_FOLLOWER_RANGES_DEG,
@@ -114,7 +114,7 @@ class StarArm102HDLeader(_StarArm102):
             for i, name in enumerate(self.JOINT_ORDER):
                 direction = STAR_ARM_102_B601_FOLLOWER_DIRECTIONS[name]
                 follower_range = STAR_ARM_102_B601_FOLLOWER_RANGES_DEG[name]
-                profiled[i] = float(np.clip(profiled[i] * direction, *follower_range))
+                profiled[i] = _clip_degrees(float(profiled[i] * direction), *follower_range)
         return profiled
 
     def send_action(self, action: np.ndarray, *, goal_time: float = 0.1) -> None:
