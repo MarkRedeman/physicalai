@@ -7,7 +7,6 @@ from dataclasses import replace
 from unittest.mock import Mock
 
 import pytest
-
 from physicalai_studio_plugin import SimulationLaunch, SimulationScene
 
 

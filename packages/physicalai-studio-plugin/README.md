@@ -447,6 +447,9 @@ async def _build_my_robot(
 
 ## Testing
 
+See [Performance](PERFORMANCE.md) for hardware-free SDK startup and simulation
+command benchmarks, measured results, and limitations.
+
 Create a minimal test file alongside your plugin:
 
 ```python

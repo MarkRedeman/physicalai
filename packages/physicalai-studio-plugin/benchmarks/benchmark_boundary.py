@@ -94,21 +94,38 @@ def main() -> None:
             "argv_us": _summary(_time_calls(lambda: launch.argv(scenes[0].id, None), args.calls)),
         }
 
-    print(json.dumps({
-        "python": sys.version,
-        "platform": platform.platform(),
-        "repeats": args.repeats,
-        "calls": args.calls,
-        "cold": {
-            name: {
-                "ms": _summary([sample["ms"] for sample in values]),
-                "modules": values[-1]["modules"],
-                "numpy": values[-1]["numpy"],
-            }
-            for name, values in samples.items()
-        },
-        "simulation": simulation,
-    }, indent=2))
+    # Collect provenance after measurement, without warming child imports.
+    from importlib.metadata import version
+
+    revision = subprocess.run(
+        ["git", "-C", str(Path(__file__).resolve().parent), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    print(
+        json.dumps(
+            {
+                "revision": revision,
+                "python": sys.version,
+                "platform": platform.platform(),
+                "dependencies": {name: version(name) for name in ("physicalai", "pydantic", "numpy")},
+                "repeats": args.repeats,
+                "calls": args.calls,
+                "errors": 0,
+                "cold": {
+                    name: {
+                        "ms": _summary([sample["ms"] for sample in values]),
+                        "modules": values[-1]["modules"],
+                        "numpy": values[-1]["numpy"],
+                    }
+                    for name, values in samples.items()
+                },
+                "simulation": simulation,
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":
