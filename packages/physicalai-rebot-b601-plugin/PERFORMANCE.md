@@ -91,5 +91,117 @@ uv run --no-project "$PKG/.venv/bin/python" "$PKG/benchmarks/benchmark_cpu.py" -
 uv run --no-project "$PKG/.venv/bin/python" -m pytest "$PKG/tests" -q
 ```
 
-Baseline package suite: **243 passed in 1.70 s**. Measurements of optimized
-code, parity coverage and future hardware validation follow with the change.
+Baseline package suite: **243 passed in 1.70 s**.
+
+## Change and paired results
+
+Optimized source and paired harness: `ded0d9fed1960d1ab618982526ce359553f48ca4`.
+Baseline harness: `e451d77147582ebafc443d39159b5538f2b864e2`.
+
+Expand `dot(cross(axis, lever), weight)` into its three scalar terms. Convert
+the small vectors to Python floats with `tolist()` instead of dispatching
+generic NumPy `cross` and `dot` for each loaded-link/ancestor pair. Keep the
+same kinematic traversal, link masses, joint frames, accumulation order and
+float64 output. Do not cache torques or reuse caller-visible buffers. The
+calculation still handles arbitrary gravity directions and arbitrary joint axes.
+
+The final harness compares the original kernel (a reference subclass) and the
+optimized model in the **same process**, alternating their order each repeat.
+Only the gravity kernel differs; the reference subclass reproduces the old
+implementation exactly. Fake drivers use separate state and model instances.
+The SDK budget snapshot must match for each public scenario or the harness
+raises. This pairing controls for order better than the initial sequential
+baseline, but does not remove contention from other agents/processes on the
+host. Both kernels run seven repeats of 1000 calls after 100 warmup calls.
+
+| Scenario | Original mean ± SD (us) | Optimized mean ± SD (us) | Host speedup |
+| --- | ---: | ---: | ---: |
+| DM gravity | 336.90 ± 7.36 | 70.57 ± 1.15 | 4.77x |
+| RS gravity | 451.64 ± 3.76 | 76.88 ± 0.81 | 5.87x |
+| DM POS_VEL read | 6.30 ± 0.04 | 6.40 ± 0.04 | unchanged path |
+| DM POS_VEL write | 52.80 ± 0.58 | 52.25 ± 0.68 | unchanged path |
+| DM MIT read | 6.35 ± 0.04 | 6.37 ± 0.04 | unchanged path |
+| DM MIT write | 400.87 ± 4.86 | 137.52 ± 10.12 | 2.91x |
+| RS read | 6.33 ± 0.10 | 6.26 ± 0.04 | unchanged path |
+| RS write | 532.48 ± 22.99 | 148.09 ± 13.99 | 3.60x |
+
+| Affected scenario | Original p50 / p95 / p99 / max (us) | Optimized p50 / p95 / p99 / max (us) |
+| --- | --- | --- |
+| DM gravity | 335.74 / 346.51 / 363.64 / 1243.84 | 70.19 / 73.12 / 77.39 / 292.50 |
+| RS gravity | 448.44 / 468.38 / 486.01 / 825.80 | 76.53 / 79.72 / 82.16 / 112.99 |
+| DM MIT write | 400.63 / 415.70 / 431.71 / 559.43 | 132.35 / 214.65 / 218.54 / 258.44 |
+| RS write | 522.29 / 547.76 / 870.46 / 890.59 | 142.88 / 231.33 / 235.23 / 322.51 |
+
+All six read/write fake call snapshots match the budgets above, before and
+after. No errors occurred in the timed calls. No motion accuracy, reply age,
+dropped frames, hardware CPU use, real throughput or control jitter was measured.
+The gain is CPU headroom in gravity-enabled MIT commands, **not** a claim of
+4.77–5.87x faster physical motion or bus throughput. POS_VEL and observations do
+not use gravity and show only small timing noise. In particular, do not infer a
+read regression from the 0.10 us difference in the first read row.
+
+## Regression checks
+
+Final package suite: **253 passed in 1.94 s** (243 existing + 10 new cases).
+The new tests compare the old kernel at zero, pi and 100 seeded random poses
+for each bundled URDF, with ordinary, tilted and zero gravity. A synthetic
+branched tree covers non-axis-aligned joints, rotated origins, fixed payloads,
+an unactuated revolute joint and a reordered active-joint subset. Comparisons
+use `rtol=atol=1e-13`, not bitwise parity: scalar summation and NumPy dot can
+differ in the last floating-point bits. Existing analytic and MuJoCo-reference
+tests remain independent checks of sign, magnitude and public/motor frames.
+Additional tests preserve rejection of invalid gravity lengths, input/output
+ownership, and reentrant calls on the same model. Existing driver tests still
+cover motion shaping, dropout detection, gripper limits/stalls, park/release,
+connection cleanup and error handling.
+
+Focused checks, from the root (Ruff 0.17.5, Pyrefly 1.4.1):
+
+```bash
+GRAVITY="$PKG/src/physicalai_rebot_b601_plugin/gravity.py"
+BENCH="$PKG/benchmarks/benchmark_cpu.py"
+TEST="$PKG/tests/unit/test_gravity_performance.py"
+uv run --no-project "$SHARED/bin/ruff" check "$GRAVITY"
+uv run --no-project "$SHARED/bin/ruff" check --select E,F,I,UP \
+  --config 'include=["*.py"]' --config 'extend-exclude=[]' "$BENCH" "$TEST"
+uv run --no-project "$SHARED/bin/ruff" format --check \
+  --config 'include=["*.py"]' --config 'extend-exclude=[]' "$GRAVITY" "$BENCH" "$TEST"
+uv run --no-project "$SHARED/bin/pyrefly" check \
+  --python-interpreter-path "$SHARED/bin/python" \
+  --search-path "$PKG/.venv/lib/python3.13/site-packages" "$GRAVITY"
+git diff --check
+```
+
+Changed production source passes all configured Ruff checks; benchmark/tests
+pass the explicit selection (repository defaults exclude tests/benchmarks).
+All three files pass formatting. Focused Pyrefly reports **0 errors**, with one
+missing-defusedxml-stubs warning. Package-wide source Ruff reports **15 existing
+diagnostics** in untouched files (14 deprecated `noqa` comments and one oversized
+try block); this work leaves them unchanged. No shared lockfile/environment was
+modified and no heavy optional SDK was installed.
+
+## Limits and future hardware validation
+
+No protocol batching was attempted because the wrapper exposes no verified
+multi-motor CAN command primitive. No feedback requests, stall-protection polls,
+torque-limit refreshes or startup checks were removed. The Python SDK source
+inspection does not verify native timing, firmware response semantics or all
+supported MotorBridge versions (the package permits versions from 0.4.4).
+
+Before claiming hardware gains, a supervised operator should:
+
+1. Record DM/RS model, firmware, SDK version, bus bitrate, adapter, power supply,
+   control settings, URDF, starting pose and commit SHAs. Support the arm and
+   verify emergency stop/torque release with the existing safety procedure.
+2. Capture actual CAN/serial traffic to confirm the estimated frame budget,
+   command responses, feedback age and adapter queue behavior. Preserve all
+   startup acknowledgements and torque-limit refreshes.
+3. Alternate old/new runs sequentially on the same bus for 5–10 repeats, with
+   2 s warmup and 10 s windows. Report latency p50/p95/p99/max, errors, dropped
+   frames, CPU use and RSS, not only mean rate. Start with read-only captures;
+   never run an unattended tight action loop on the robot.
+4. For motion validation, require explicit operator confirmation and use small,
+   slowly interpolated targets near a supported neutral pose. Check tracking,
+   gravity signs, gripper force/stall protection, dropout handling and supervised
+   park/release. Ramp back to the starting pose. A faster host loop does not
+   justify increasing command rates or weakening limits without this validation.
