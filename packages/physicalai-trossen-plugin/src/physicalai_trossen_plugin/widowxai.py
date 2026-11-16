@@ -228,9 +228,18 @@ class WidowXAI(Robot):
         positions_array = np.array(positions, dtype=np.float32)
         # Backend/app-facing convention: non-gripper joints in degrees,
         # gripper kept in native scalar units.
-        for i, name in enumerate(self.joint_names):
-            if name != "gripper":
-                positions_array[i] = np.rad2deg(positions_array[i])
+        if (
+            tuple(self.joint_names) == WIDOWXAI_JOINT_ORDER
+            and positions_array.ndim > 0
+            and len(positions_array) >= self.NUM_JOINTS
+        ):
+            angular_positions = positions_array[: self.NUM_JOINTS - 1]
+            np.rad2deg(angular_positions, out=angular_positions)
+        else:
+            # Preserve custom joint layouts and malformed SDK response errors.
+            for i, name in enumerate(self.joint_names):
+                if name != "gripper":
+                    positions_array[i] = np.rad2deg(positions_array[i])
         velocities_array = np.array(velocities, dtype=np.float32)
 
         sensor_data: dict[str, np.ndarray] = {"velocities": velocities_array}
@@ -270,9 +279,13 @@ class WidowXAI(Robot):
         driver = self._require_driver()
 
         target_radians = np.asarray(action, dtype=np.float32).copy()
-        for i, name in enumerate(self.joint_names):
-            if name != "gripper":
-                target_radians[i] = np.deg2rad(target_radians[i])
+        if tuple(self.joint_names) == WIDOWXAI_JOINT_ORDER:
+            angular_targets = target_radians[: self.NUM_JOINTS - 1]
+            np.deg2rad(angular_targets, out=angular_targets)
+        else:
+            for i, name in enumerate(self.joint_names):
+                if name != "gripper":
+                    target_radians[i] = np.deg2rad(target_radians[i])
 
         present_positions = np.asarray(driver.get_all_positions(), dtype=np.float32)
         safe_action = self._ensure_safe_goal_position(target_radians, present_positions, self.MAX_RELATIVE_TARGET)

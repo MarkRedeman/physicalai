@@ -324,3 +324,113 @@ class TestWidowXAIExternalEfforts:
 
         with pytest.raises(RuntimeError, match="only available for leader"):
             robot.set_external_efforts(np.zeros(7, dtype=np.float32))  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize("role", ["leader", "follower"])
+def test_observation_scalar_parity_and_owned_buffers(mock_trossen_arm: MagicMock, role: str) -> None:
+    """Vector conversion matches float32 scalar rounding and never aliases SDK state."""
+    robot = _create_robot(mock_trossen_arm, role=role)
+    driver = mock_trossen_arm.TrossenArmDriver.return_value
+    rng = np.random.default_rng(42)
+    vectors = list(rng.uniform(-np.pi, np.pi, (100, 7)))
+    vectors.extend(
+        [
+            np.array([0.0, -0.0, np.inf, -np.inf, np.nan, np.finfo(np.float32).tiny, -0.0]),
+            np.array([np.pi, -np.pi, 0.25, -0.25, 1e-20, -1e-20, 0.02]),
+        ]
+    )
+    previous = None
+    for values in vectors:
+        driver.get_all_positions.return_value = values
+        driver.get_all_velocities.return_value = values
+        driver.get_all_external_efforts.return_value = values
+        original = values.copy()
+        expected = np.array(values, dtype=np.float32)
+        for i in range(6):
+            expected[i] = np.rad2deg(expected[i])
+        obs = robot.get_observation()
+        # Compare bits as well as dtype, including signed zero and NaN.
+        np.testing.assert_array_equal(obs.joint_positions.view(np.uint32), expected.view(np.uint32))
+        assert obs.joint_positions.dtype == np.float32
+        np.testing.assert_array_equal(values, original)
+        assert not np.shares_memory(obs.joint_positions, values)
+        for sensor in obs.sensor_data.values():
+            assert sensor.dtype == np.float32
+            assert not np.shares_memory(sensor, values)
+            assert not np.shares_memory(sensor, obs.joint_positions)
+        if previous is not None:
+            assert not np.shares_memory(previous.joint_positions, obs.joint_positions)
+        previous = obs
+    expected_calls = [call.get_all_positions(), call.get_all_velocities()]
+    if role == "follower":
+        expected_calls.append(call.get_all_external_efforts())
+    # Ignore startup calls; every observation keeps the same getter sequence.
+    assert driver.mock_calls[-len(expected_calls) :] == expected_calls
+
+
+@pytest.mark.parametrize("dtype", [np.float32, np.float64, np.int32])
+def test_action_scalar_parity_safety_and_input_ownership(mock_trossen_arm: MagicMock, dtype: type) -> None:
+    """Preserve scalar rounding, clipping, extra dims, and read-only strided input."""
+    robot = _create_robot(mock_trossen_arm)
+    driver = mock_trossen_arm.TrossenArmDriver.return_value
+    rng = np.random.default_rng(73)
+    for _ in range(100):
+        action = rng.uniform(-180, 180, 22).astype(dtype)[::2]
+        action.flags.writeable = False
+        original = action.copy()
+        present = rng.uniform(-1, 1, 7).astype(np.float32)
+        driver.get_all_positions.return_value = present
+        expected = np.asarray(action[:7], dtype=np.float32).copy()
+        for i in range(6):
+            expected[i] = np.deg2rad(expected[i])
+        expected = present + np.clip(expected - present, -0.25, 0.25)
+        driver.reset_mock()
+        with patch("physicalai_trossen_plugin.widowxai.logger.warning"):
+            robot.send_action(action, goal_time=0.37)
+        assert driver.mock_calls == [call.get_all_positions(), call.set_all_positions(expected.tolist(), 0.37, False)]
+        sent = np.asarray(driver.set_all_positions.call_args.args[0], dtype=np.float32)
+        np.testing.assert_array_equal(sent.view(np.uint32), expected.view(np.uint32))
+        np.testing.assert_array_equal(action, original)
+
+
+def test_action_uses_fresh_positions_and_propagates_read_errors(mock_trossen_arm: MagicMock) -> None:
+    """Never reuse a previous observation for safety clipping or swallow SDK errors."""
+    robot = _create_robot(mock_trossen_arm)
+    driver = mock_trossen_arm.TrossenArmDriver.return_value
+    driver.get_all_positions.side_effect = [[0.0] * 7, [1.0] * 7, RuntimeError("state unavailable")]
+    driver.reset_mock()
+    robot.send_action(np.zeros(7, dtype=np.float32))
+    with patch("physicalai_trossen_plugin.widowxai.logger.warning"):
+        robot.send_action(np.zeros(7, dtype=np.float32))
+    assert driver.set_all_positions.call_args_list == [
+        call([0.0] * 7, 0.1, False),
+        call([0.75] * 7, 0.1, False),
+    ]
+    with pytest.raises(RuntimeError, match="state unavailable"):
+        robot.send_action(np.zeros(7, dtype=np.float32))
+    assert driver.set_all_positions.call_count == 2
+
+
+def test_custom_joint_layout_retains_name_based_conversion(mock_trossen_arm: MagicMock) -> None:
+    """Keep compatibility with subclasses placing the gripper at another index."""
+    robot = _create_robot(mock_trossen_arm)
+    robot.JOINT_ORDER = ["gripper", *robot.joint_names[:-1]]
+    driver = mock_trossen_arm.TrossenArmDriver.return_value
+    values = np.array([0.02, 0.1, -0.1, 0.2, -0.2, 0.05, -0.05], dtype=np.float32)
+    driver.get_all_positions.return_value = values
+    obs = robot.get_observation()
+    expected = values.copy()
+    for i in range(1, 7):
+        expected[i] = np.rad2deg(expected[i])
+    np.testing.assert_array_equal(obs.joint_positions, expected)
+    robot.send_action(expected)
+    np.testing.assert_allclose(driver.set_all_positions.call_args.args[0], values, atol=1e-8)
+
+
+def test_short_sdk_response_keeps_index_error(mock_trossen_arm: MagicMock) -> None:
+    """Malformed responses must not silently produce a shorter observation."""
+    robot = _create_robot(mock_trossen_arm)
+    driver = mock_trossen_arm.TrossenArmDriver.return_value
+    driver.get_all_positions.return_value = [0.0] * 3
+    with pytest.raises(IndexError):
+        robot.get_observation()
