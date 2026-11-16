@@ -730,8 +730,6 @@ class MuJoCoRobot(OperatorControls):
     # ------------------------------------------------------------------
 
     def _step_and_sync(self) -> None:
-        import mujoco  # noqa: PLC0415
-
         self._drain_commands()
         sim = self._sim
         model, data = sim.model, sim.data  # type: ignore[union-attr]
@@ -743,12 +741,7 @@ class MuJoCoRobot(OperatorControls):
         else:
             control_dt = self._substeps * float(model.opt.timestep)
             self._automation.tick(model, data, control_dt, self._arm_targets())  # type: ignore[union-attr]
-            for _ in range(self._substeps):
-                if self._ease is not None:
-                    self._advance_ease()
-                for channels in sim.channels:  # type: ignore[union-attr]
-                    channels.apply_pd()
-                mujoco.mj_step(model, data)
+            self._step_physics(sim)  # type: ignore[arg-type]
             if sim.bases:  # type: ignore[union-attr]
                 self._update_bases()
             self._record_tick(float(data.time))
@@ -765,6 +758,28 @@ class MuJoCoRobot(OperatorControls):
             elif self._viewer.native is not None:
                 self._handle_viewer_reset()
         self._cameras.publish(data)
+
+    def _step_physics(self, sim: Sim) -> None:
+        """Batch integration only when no Python controller needs to run between steps."""
+        import mujoco  # noqa: PLC0415
+
+        model, data = sim.model, sim.data
+        if (
+            self._substeps > 1
+            and self._ease is None
+            and not any(channels.requires_step_control for channels in sim.channels)
+            and mujoco.get_mjcb_control() is None
+        ):
+            # MuJoCo repeats the identical integration steps in C. Keep Python substeps for
+            # easing, software controllers and user control callbacks that can change targets.
+            mujoco.mj_step(model, data, nstep=self._substeps)
+        else:
+            for _ in range(self._substeps):
+                if self._ease is not None:
+                    self._advance_ease()
+                for channels in sim.channels:
+                    channels.apply_pd()
+                mujoco.mj_step(model, data)
 
     def _update_bases(self) -> None:
         """Detect falls, reset on one when the scene asks for it (DRV-9), and publish the base status."""

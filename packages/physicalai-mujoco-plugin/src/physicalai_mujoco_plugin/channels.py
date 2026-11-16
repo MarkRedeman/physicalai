@@ -383,6 +383,11 @@ class ArmChannels:
             channel = self.channels[index]
             data.ctrl[channel.first.actuator_id] = self._velocity_ctrl(index, channel)
 
+    @property
+    def requires_step_control(self) -> bool:
+        """Whether software torque or velocity control must run before each physics step."""
+        return bool(self._pd_rows or self._velocity_gains_by_index)
+
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
