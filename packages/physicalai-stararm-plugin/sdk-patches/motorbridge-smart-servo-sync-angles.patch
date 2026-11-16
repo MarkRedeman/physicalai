@@ -1,0 +1,246 @@
+From 5f35a27dae6f026d91ccea810fba5cb51d0a4bed Mon Sep 17 00:00:00 2001
+From: Mark Redeman <markredeman@gmail.com>
+Date: Mon, 16 Nov 2026 09:52:21 +0100
+Subject: [PATCH] perf(fashionstar): batch angle targets in a native sync
+ command
+
+Signed-off-by: Mark Redeman <markredeman@gmail.com>
+---
+ bindings/python/pyproject.toml                |   2 +-
+ .../motorbridge_smart_servo/fashionstar.py    |  22 ++++
+ smart_servo_py/src/lib.rs                     |  28 +++++
+ .../fashionstar/src/controller.rs             |  11 ++
+ .../fashionstar/src/protocol.rs               | 101 ++++++++++++++++++
+ 5 files changed, 163 insertions(+), 1 deletion(-)
+
+diff --git a/bindings/python/pyproject.toml b/bindings/python/pyproject.toml
+index f85ce09..dca724a 100644
+--- a/bindings/python/pyproject.toml
++++ b/bindings/python/pyproject.toml
+@@ -4,7 +4,7 @@ build-backend = "maturin"
+ 
+ [project]
+ name = "motorbridge-smart-servo"
+-version = "0.0.4"
++version = "0.0.4+physicalai.sync1"
+ description = "PyO3 bindings for MotorBridge Smart Servo"
+ requires-python = ">=3.9"
+ readme = "README.md"
+diff --git a/bindings/python/src/motorbridge_smart_servo/fashionstar.py b/bindings/python/src/motorbridge_smart_servo/fashionstar.py
+index 1ee5a8b..100bd34 100644
+--- a/bindings/python/src/motorbridge_smart_servo/fashionstar.py
++++ b/bindings/python/src/motorbridge_smart_servo/fashionstar.py
+@@ -138,6 +138,28 @@ class FashionStarServo:
+         except RuntimeError as exc:
+             raise _wrap_native_error(exc) from exc
+ 
++    def set_angles(
++        self,
++        servo_ids: list[int],
++        angles_deg: list[float],
++        *,
++        multi_turn: bool = False,
++        interval_ms: int = 0,
++    ) -> None:
++        """Send one native sync packet; no per-servo acknowledgement or retry.
++
++        All targets are validated before any bytes are written. Framing limits
++        depend on the command: at most 16 targets for timed multi-turn moves.
++        """
++        if interval_ms < 0:
++            raise ValueError("interval_ms must be >= 0")
++        ids = [self._check_id(i) for i in servo_ids]
++        angles = [float(angle) for angle in angles_deg]
++        try:
++            self._inner.set_angles(ids, angles, bool(multi_turn), int(interval_ms))
++        except RuntimeError as exc:
++            raise _wrap_native_error(exc) from exc
++
+     def reset_multi_turn(self, servo_id: int) -> None:
+         try:
+             self._inner.reset_multi_turn(self._check_id(servo_id))
+diff --git a/smart_servo_py/src/lib.rs b/smart_servo_py/src/lib.rs
+index 5daee69..913d499 100644
+--- a/smart_servo_py/src/lib.rs
++++ b/smart_servo_py/src/lib.rs
+@@ -264,6 +264,34 @@ impl PyFashionStarServo {
+         })
+     }
+ 
++    #[pyo3(signature = (servo_ids, angles_deg, multi_turn = false, interval_ms = 0))]
++    fn set_angles(
++        &self,
++        py: Python<'_>,
++        servo_ids: Vec<u8>,
++        angles_deg: Vec<f32>,
++        multi_turn: bool,
++        interval_ms: u32,
++    ) -> PyResult<()> {
++        if servo_ids.len() != angles_deg.len() {
++            return Err(PyValueError::new_err(
++                "servo_ids and angles_deg must have equal lengths",
++            ));
++        }
++        let interval_ms = checked_interval(interval_ms, multi_turn)?;
++        for &angle in &angles_deg {
++            finite_angle(angle)?;
++        }
++        let targets: Vec<_> = servo_ids.into_iter().zip(angles_deg).collect();
++        py.detach(|| {
++            self.with_controller(|controller| {
++                controller
++                    .set_angles(&targets, multi_turn, Some(interval_ms))
++                    .map_err(py_bus_err)
++            })
++        })
++    }
++
+     #[pyo3(signature = (servo_id))]
+     fn reset_multi_turn(&self, py: Python<'_>, servo_id: u8) -> PyResult<()> {
+         let servo_id = check_servo_id(servo_id);
+diff --git a/smart_servo_vendors/fashionstar/src/controller.rs b/smart_servo_vendors/fashionstar/src/controller.rs
+index c52de45..986a942 100644
+--- a/smart_servo_vendors/fashionstar/src/controller.rs
++++ b/smart_servo_vendors/fashionstar/src/controller.rs
+@@ -199,6 +199,17 @@ impl FashionStarController {
+         Ok(())
+     }
+ 
++    /// Send all targets with one write and flush. Never retry a partial write.
++    pub fn set_angles(
++        &mut self,
++        targets: &[(ServoId, f32)],
++        multi_turn: bool,
++        interval_ms: Option<u32>,
++    ) -> Result<()> {
++        let packet = protocol::encode_set_angles(targets, multi_turn, interval_ms)?;
++        self.bus.write_all(&packet)
++    }
++
+     pub fn set_timeout(&mut self, timeout: Duration) {
+         self.bus.set_timeout(timeout);
+     }
+diff --git a/smart_servo_vendors/fashionstar/src/protocol.rs b/smart_servo_vendors/fashionstar/src/protocol.rs
+index 6755f5f..1419cd1 100644
+--- a/smart_servo_vendors/fashionstar/src/protocol.rs
++++ b/smart_servo_vendors/fashionstar/src/protocol.rs
+@@ -191,6 +191,47 @@ pub fn encode_set_angle(
+     }
+ }
+ 
++/// Encode a native sync command without changing any individual target fields.
++/// Commands are fire-and-forget, just like their addressed equivalents.
++pub fn encode_set_angles(
++    targets: &[(u8, f32)],
++    multi_turn: bool,
++    interval_ms: Option<u32>,
++) -> Result<Vec<u8>> {
++    if targets.is_empty() {
++        return Err(SmartServoError::Protocol(
++            "targets must not be empty".into(),
++        ));
++    }
++    // Validate the count before allocating or narrowing the count/length to u8.
++    let record_len = match (multi_turn, interval_ms.filter(|v| *v != 0)) {
++        (true, Some(_)) => 15,
++        (false, Some(_)) | (true, None) => 11,
++        (false, None) => 7,
++    };
++    if targets.len() > (u8::MAX as usize - 3) / record_len {
++        return Err(SmartServoError::Protocol(
++            "sync packet params too large".into(),
++        ));
++    }
++    let mut seen = [false; 254];
++    let mut params = Vec::with_capacity(3 + targets.len() * record_len);
++    for &(id, angle) in targets {
++        if id > 253 || seen[id as usize] {
++            return Err(SmartServoError::Protocol(
++                "servo IDs must be unique and in range 0..253".into(),
++            ));
++        }
++        seen[id as usize] = true;
++        let packet = encode_set_angle(id, angle, multi_turn, interval_ms)?;
++        if params.is_empty() {
++            params.extend_from_slice(&[packet[2], record_len as u8, targets.len() as u8]);
++        }
++        params.extend_from_slice(&packet[4..packet.len() - 1]);
++    }
++    pack_request(CODE_SYNC_COMMAND, &params)
++}
++
+ pub fn decode_ping(packet: &Packet) -> Option<u8> {
+     (packet.code == CODE_PING && packet.params.len() == 1).then_some(packet.params[0])
+ }
+@@ -311,6 +352,66 @@ mod tests {
+         assert!(encode_set_angle(0, 10.0, false, Some(100_000)).is_err());
+     }
+ 
++    #[test]
++    fn sync_targets_preserve_every_addressed_field() {
++        let targets = [(0, 12.35), (1, -12.35), (253, -0.05)];
++        for multi_turn in [false, true] {
++            for interval in [None, Some(0), Some(100)] {
++                let sync = encode_set_angles(&targets, multi_turn, interval).unwrap();
++                let addressed = encode_set_angle(0, 12.35, multi_turn, interval).unwrap();
++                assert_eq!(&sync[..3], &[0x12, 0x4c, CODE_SYNC_COMMAND]);
++                assert_eq!(&sync[4..7], &[addressed[2], addressed[3], 3]);
++                let payload: Vec<_> = targets
++                    .iter()
++                    .flat_map(|&(id, angle)| {
++                        let p = encode_set_angle(id, angle, multi_turn, interval).unwrap();
++                        p[4..p.len() - 1].to_vec()
++                    })
++                    .collect();
++                assert_eq!(&sync[7..sync.len() - 1], &payload);
++                assert_eq!(
++                    *sync.last().unwrap(),
++                    checksum(REQ_HEADER, CODE_SYNC_COMMAND, &sync[4..sync.len() - 1])
++                );
++            }
++        }
++    }
++
++    #[test]
++    fn sync_matches_vendor_multi_turn_interval_example() {
++        let packet = encode_set_angles(&[(1, 1001.0), (2, 1001.0)], true, Some(1000)).unwrap();
++        // Vendor example: command 25, subcommand 14, 15-byte records, two targets.
++        assert_eq!(&packet[..7], &[0x12, 0x4c, 25, 33, 14, 15, 2]);
++        assert_eq!(&packet[7..12], &[1, 0x1a, 0x27, 0, 0]);
++        assert_eq!(&packet[12..16], &1000_u32.to_le_bytes());
++        // Preserve the existing encoder's 20ms ramps and zero power field.
++        assert_eq!(&packet[16..22], &[20, 0, 20, 0, 0, 0]);
++    }
++
++    #[test]
++    fn sync_checks_framing_ids_and_all_targets() {
++        assert!(encode_set_angles(&[], true, Some(100)).is_err());
++        assert!(encode_set_angles(&[(1, 0.0), (1, 1.0)], true, Some(100)).is_err());
++        assert!(encode_set_angles(&[(254, 0.0)], true, Some(100)).is_err());
++        assert!(encode_set_angles(&[(255, 0.0)], true, Some(100)).is_err());
++        for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
++            assert!(encode_set_angles(&[(0, 0.0), (1, value)], true, Some(100)).is_err());
++        }
++        assert!(encode_set_angles(&[(0, 0.0)], true, Some(4_096_001)).is_err());
++        assert!(encode_set_angles(&[(0, 0.0)], false, Some(65_536)).is_err());
++        for (multi_turn, interval, max_count) in [
++            (true, Some(100), 16),
++            (true, None, 22),
++            (false, Some(100), 22),
++            (false, None, 36),
++        ] {
++            let mut targets: Vec<_> = (0..max_count).map(|id| (id, 0.0)).collect();
++            assert!(encode_set_angles(&targets, multi_turn, interval).is_ok());
++            targets.push((max_count, 0.0));
++            assert!(encode_set_angles(&targets, multi_turn, interval).is_err());
++        }
++    }
++
+     #[test]
+     fn reports_checksum_mismatch() {
+         let mut bad = vec![0x05, 0x1c, CODE_PING, 1, 1, 0];
+
+base-commit: 4f8895a00d9f786ada258ca6b12c46f65206e0ed
+-- 
+2.43.0
+

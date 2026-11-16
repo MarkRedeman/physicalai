@@ -47,6 +47,7 @@ include = [
     "README.md",
     "pyproject.toml",
     "LICENSE",
+    "sdk-patches/**",
 ]
 exclude = [
     "examples/**",
