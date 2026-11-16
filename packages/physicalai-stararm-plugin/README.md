@@ -43,6 +43,22 @@ with connect(robot) as arm:
     arm.send_action(obs.joint_positions)
 ```
 
+## Batched angle commands
+
+With a batch-capable MotorBridge SDK, follower and assist commands send one
+FashionStar sync packet instead of seven addressed angle packets. The public
+`motorbridge-smart-servo==0.0.4` wheel does not expose this operation and retains
+the existing seven-write path. Connection logs report `sync angle writes: True`
+when batching is available. Reads and passive leader behavior are unchanged.
+
+See [the reviewed SDK patch and release-wheel build instructions](sdk-patches/README.md).
+The seven-joint timed command drops from 140 to 113 bytes and from seven native
+writes/drains to one. Targets, clipping, movement duration, ramps, and power fields
+stay the same; a failed batch never retries with individual motion commands.
+Verify servo model/firmware support (vendor requirement: brushless magnetic-encoder
+V316+) before supervised hardware validation. No real-device speedup or motion
+reliability is claimed; upstream still labels write control experimental.
+
 ## Run with the PhysicalAI CLI
 
 ```bash

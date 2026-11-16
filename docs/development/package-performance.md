@@ -14,9 +14,11 @@ They do not establish physical robot throughput, motion accuracy, or bus latency
 Other workers shared the host, so the reports describe scheduling noise and
 whether before/after runs alternated.
 
-The drivers retain their transport operations, feedback freshness checks, safety
-reads, motion limits, torque lifecycle, acknowledgements, and configuration writes.
-No unverified protocol batching, EEPROM changes, or hot-loop sleeps were added.
+Outside the explicit Stararm sync extension, drivers retain their transport
+operations. All changes preserve feedback freshness checks, safety reads, motion
+limits, torque lifecycle, acknowledgement semantics, and configuration writes.
+No EEPROM changes or hot-loop sleeps were added. The later Stararm SDK extension
+uses the vendor-documented sync-angle format and remains hardware-unvalidated.
 Vendor SDK calls are not assumed to be wire round trips. Each package report
 documents the available protocol evidence and remaining hardware validation.
 
@@ -30,7 +32,7 @@ limitations. Some results are batch averages rather than per-call percentiles.
 | --- | --- | --- |
 | [LeRobot](../../packages/physicalai-lerobot-plugin/PERFORMANCE.md) | Reuse discovered joint-key membership | Six-joint observation shaping: 1.308 → 0.994 µs; 24% less host time |
 | [SO-101](../../packages/physicalai-so101-plugin/PERFORMANCE.md) | Reuse normalized tick fractions and remove redundant conversion work | Normalized read conversion: 7.372 → 4.546 µs; fake control cycle: 23.834 → 20.412 µs |
-| [Stararm](../../packages/physicalai-stararm-plugin/PERFORMANCE.md) | Replace repeated scalar NumPy clipping dispatch | Follower observation: 21.281 → 7.404 µs; action: 16.627 → 2.475 µs |
+| [Stararm](../../packages/physicalai-stararm-plugin/PERFORMANCE.md) | Scalar clipping improvement; subsequent optional native sync-angle SDK extension | CPU-only observation: 21.281 → 7.404 µs; SDK command capture: 7 packets / 140 bytes → 1 packet / 113 bytes |
 | [Trossen](../../packages/physicalai-trossen-plugin/PERFORMANCE.md) | Vectorize angular-joint conversion while retaining gripper passthrough | Follower observation: 2.455 → 1.799 µs; action: 4.774 → 3.967 µs |
 | [Rebot B601](../../packages/physicalai-rebot-b601-plugin/PERFORMANCE.md) | Expand tiny cross/dot products in gravity feedforward | DM gravity: 336.90 → 70.57 µs; RS gravity: 451.64 → 76.88 µs |
 | [Studio](../../packages/physicalai-studio-plugin/PERFORMANCE.md) | Lazy public exports and linear duplicate-scene validation | Plain SDK import: 153.471 → 0.168 ms; validation of 256 scenes: 349.658 → 7.171 µs |
@@ -47,8 +49,13 @@ application startup; accessing all exports still loads their dependencies.
 There is no SO-101-style redundant torque write on every action. Default startup
 performs seven pings, seven unlocks, and seven multi-turn resets; normal actions
 do not repeat that configuration. However, the follower/assist action still sends
-seven individual `set_angle` commands. The inspected SDK has no public batch-angle
-write API, and native write acknowledgement/timeout behavior remains unverified.
+seven individual `set_angle` commands with the public SDK wheel. The
+[reviewed native SDK extension](../../packages/physicalai-stararm-plugin/sdk-patches/README.md)
+adds `set_angles`, which the plugin selects when available: one 113-byte sync
+packet instead of seven packets totaling 140 bytes. A release-wheel PTY/`strace`
+capture verifies seven writes/drains becoming one; actual hardware still needs
+validation. Native source confirms that the angle writes were already
+fire-and-forget, so there are no per-servo acknowledgement waits to eliminate.
 The cached `motorbridge-smart-servo` 0.0.4 metadata explicitly labels write control
 temporarily unsupported. The CPU optimization does not establish write reliability
 or resolve a native serial bottleneck.
@@ -73,7 +80,7 @@ Linux. Shared dependencies and lockfiles were not changed. Package source paths
 were selected explicitly, and packages were also tested in separate processes to
 avoid same-named test modules and optional-SDK mock interference.
 
-After integrating all seven packages:
+The initial seven-package pass (before the Stararm sync-angle follow-up) validated:
 
 - SO-101: **234 passed**; Stararm: **79 passed**; Studio: **91 passed**;
   Trossen: **46 passed** using an import-only SDK placeholder and mocked drivers.

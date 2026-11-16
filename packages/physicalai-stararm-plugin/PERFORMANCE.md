@@ -1,5 +1,9 @@
 # Star Arm host performance
 
+The original CPU-only investigation below retains the seven-write transport path.
+The subsequent [native sync-angle extension](#native-sync-angle-extension) reduces
+actual command packets with a reviewed, locally built SDK wheel.
+
 ## Bus assessment before optimization
 
 The seven-joint driver uses FashionStar UART at 1,000,000 baud by default.
@@ -151,3 +155,81 @@ A/B order across repeated fixed-duration windows; report p50/p95/p99/max,
 errors, loss flags, retries and accuracy alongside throughput. Verify reconnect,
 partial servo loss, persistent jumps, and origin-reset behavior. Batching or
 torque caching needs a separate verified protocol/safety design.
+
+## Native sync-angle extension
+
+The vendor protocol supports batching; the published MotorBridge 0.0.4 Python API
+does not. The plugin now uses `set_angles` when the installed SDK exposes it and
+retains the old addressed path otherwise. The checked-in
+[SDK patch/build guide](sdk-patches/README.md) pins the native source revision,
+documents firmware requirements, and produces `0.0.4+physicalai.sync1` in an
+isolated environment. No shared environment, dependency source, or lockfile was
+changed to an unpublished build.
+
+The extension reuses the original native target encoder for every servo record,
+then adds the official sync envelope: command 25, subcommand 14, record length 15,
+count 7. It preserves float32 scaling/rounding, ID order, 20 ms acceleration and
+deceleration fields, zero power field, movement duration, clipping, and gripper
+handling. Zero-duration commands retain the corresponding subcommand 13 encoding.
+Read behavior, torque, calibration, origin writes and connection setup stay intact.
+
+All records are validated before sending anything. A failed batch propagates its
+error without retrying seven addressed writes, since the batch could already be
+partly transmitted. Neither the old nor the new angle-write path waits for servo
+acknowledgements; no previous write acknowledgement is sacrificed. Broadcast
+delivery/rejection remains unverified, so supervised hardware testing is required.
+
+### Native SDK / OS capture
+
+Measurements used the release-built patched wheel on Linux x86_64, CPython 3.13.1,
+Rust 1.94.1, and maturin 1.16.0. The inert harness opens only an OS-created PTY;
+there is no physical serial port, USB adapter or servo. `strace -yy` captures
+`write` and `ioctl` calls on that PTY's slave descriptor. Encoder and system-call
+counts are measured; wire serialization times are calculated, not measured.
+The seven zero-target addressed packets also match a capture from the public
+0.0.4 wheel byte-for-byte, not only the patched wheel's retained addressed path.
+
+| Seven-joint timed action | Addressed | Sync |
+| --- | ---: | ---: |
+| Captured command packets | 7 | 1 |
+| Captured command bytes | 140 | 113 |
+| PTY-slave `write` system calls | 7 × 20 bytes | 1 × 113 bytes |
+| PTY-slave drain calls (`TCSBRK`) | 7 | 1 |
+| Ideal wire serialization, 1 Mbps 8N1 | 1.400 ms | 1.130 ms |
+
+The byte reduction is **19.3%**, saving **270 µs** of ideal command serialization
+and six host writes/drains per action. The 7→1 packet count is not a 7× wire-time
+gain because all seven target payloads still have to be sent. USB scheduling,
+firmware execution, buffer behavior and reply timing were not measured. The
+shared-host CPU results from the earlier investigation are separate measurements.
+
+Reproduce the capture with `benchmarks/trace_sync_angles.py --mode addressed` and
+`--mode sync` in the patched SDK environment. The build guide includes full setup
+and `strace` instructions. The script accepts no physical device path and does
+not perform motion. No hardware throughput or accuracy claim follows from it.
+
+### Validation and remaining work
+
+- Native workspace: **26 Rust tests passed**, including three new encoder tests
+  covering all command variants, vendor framing, record parity, lengths, IDs,
+  nonfinite targets, and duration bounds. Existing reliability tests still pass.
+- Release wheel: **18 pseudo-terminal integration cases passed**, including an
+  actual plugin → Python wrapper → PyO3 → native controller → OS write. They
+  compare addressed and sync target records, exercise malformed batches with no
+  bytes emitted, and verify closed-bus errors. Tests are explicitly opt-in via
+  `STARARM_TEST_NATIVE_SDK=1` and run separately from SDK-mocked tests.
+- Plugin tests add 16 cases for clipping/order/duration, caller ownership, legacy
+  SDK compatibility, repeated actions, error propagation without fallback,
+  passive leaders, B601 assist conversion, and native-frame hold behavior.
+  The full mocked package suite reports **95 passed, 18 skipped**; those 18 native
+  cases run and pass separately against the patched release wheel. Pinned Ruff
+  lint/format and focused source Pyrefly pass (**0 type errors**).
+- The generated patch applies cleanly to the pinned base. The plugin source
+  distribution includes the patch and build guide. No wheel is committed.
+- Firmware support and real motion remain unvalidated. The vendor limits sync
+  commands to brushless magnetic-encoder servos at V316 or newer. The upstream
+  SDK's experimental-write warning remains applicable.
+- Missing monitor replies can still consume the native SDK's **100 ms overall
+  read timeout**. Servo movement durations can still introduce tracking lag.
+  Batching writes does not fix either condition, and passive leaders gain no
+  write-path benefit. Profile reads/reliability separately before further tuning.

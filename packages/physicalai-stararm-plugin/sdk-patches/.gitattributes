@@ -1,0 +1,2 @@
+# Diff context prefixes and format-patch trailers contain significant spaces.
+*.patch -whitespace
