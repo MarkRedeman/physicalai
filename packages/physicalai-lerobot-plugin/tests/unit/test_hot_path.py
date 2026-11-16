@@ -103,7 +103,7 @@ def test_actions_keep_order_python_floats_and_independent_dictionaries(
     assert device.commands[0] is not device.commands[1]
     assert all(type(value) is float for command in device.commands for value in command.values())
     device.commands[0]["a.pos"] = 999
-    assert device.commands[1]["a.pos"] == -1.0
+    np.testing.assert_equal(device.commands[1]["a.pos"], -1.0)
     assert device.reads == 0
 
 
