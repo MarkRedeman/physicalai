@@ -74,13 +74,11 @@ class CalibrationTables:
         raw = np.asarray(ticks, dtype=np.float64)
         clipped = np.clip(raw, self.range_min, self.range_max)
         span = np.where(self.valid, self.span, 1.0)
-        body = (clipped - self.range_min) / span * 200.0 - 100.0
-        gripper = (clipped - self.range_min) / span * 100.0
-        values = np.where(
-            self.gripper_mask,
-            np.clip(gripper, 0.0, 100.0),
-            np.clip(body, -100.0, 100.0),
-        )
+        fraction = (clipped - self.range_min) / span
+        # Clipping ticks already bounds valid fractions to [0, 1]. Keep the
+        # original multiply/subtract order for exact float32 parity; invalid
+        # ranges are masked below and NaNs still propagate for valid ranges.
+        values = np.where(self.gripper_mask, fraction * 100.0, fraction * 200.0 - 100.0)
         return np.where(self.valid, values, 0.0).astype(np.float32)
 
     def ticks_to_degrees(self, ticks: np.ndarray) -> np.ndarray:
@@ -110,8 +108,7 @@ class CalibrationTables:
             msg = "Normalized actions must contain only finite values"
             raise ValueError(msg)
         lower = np.where(self.gripper_mask, 0.0, -100.0)
-        upper = np.where(self.gripper_mask, 100.0, 100.0)
-        clamped = np.clip(raw, lower, upper)
+        clamped = np.clip(raw, lower, 100.0)
         span = np.where(self.valid, self.span, 1.0)
         fraction = np.where(self.gripper_mask, clamped / 100.0, (clamped + 100.0) / 200.0)
         ticks = np.round(self.range_min + fraction * span)
@@ -161,7 +158,7 @@ def ticks_to_degrees(ticks: np.ndarray, calibration: SO101Calibration) -> np.nda
 
     Raises:
         ValueError: If a recorded range has no positive span.
-    """
+    """  # ruff: ignore[docstring-extraneous-exception] - the delegated table method raises ValueError.
     return CalibrationTables.from_calibration(calibration).ticks_to_degrees(ticks)
 
 
@@ -176,5 +173,5 @@ def degrees_to_ticks(values: np.ndarray, calibration: SO101Calibration) -> np.nd
 
     Raises:
         ValueError: If a recorded range has no positive span or inputs are not finite.
-    """
+    """  # ruff: ignore[docstring-extraneous-exception] - the delegated table method raises ValueError.
     return CalibrationTables.from_calibration(calibration).degrees_to_ticks(values)

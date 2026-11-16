@@ -11,17 +11,24 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-
 from physicalai_so101_plugin._conversion import CalibrationTables
 from physicalai_so101_plugin.calibration import SO101Calibration
 from physicalai_so101_plugin.constants import SO101_JOINT_ORDER
 
 
 def make_calibration() -> SO101Calibration:
-    return SO101Calibration.from_dict({
-        name: {"id": i, "drive_mode": i % 2, "homing_offset": 2048, "range_min": i * 117, "range_max": 4095 - i * 53}
-        for i, name in enumerate(SO101_JOINT_ORDER, 1)
-    })
+    return SO101Calibration.from_dict(
+        {
+            name: {
+                "id": i,
+                "drive_mode": i % 2,
+                "homing_offset": 2048,
+                "range_min": i * 117,
+                "range_max": 4095 - i * 53,
+            }
+            for i, name in enumerate(SO101_JOINT_ORDER, 1)
+        }
+    )
 
 
 def reference_normalized(ticks: np.ndarray, tables: CalibrationTables) -> np.ndarray:
@@ -68,6 +75,26 @@ def test_normalized_output_has_independent_storage() -> None:
     np.testing.assert_array_equal(first, expected)
     np.testing.assert_array_equal(ticks, original)
     assert not np.shares_memory(first, second)
+
+
+def test_normalized_actions_exact_parity() -> None:
+    tables = CalibrationTables.from_calibration(make_calibration())
+    values = np.random.default_rng(42).uniform(-200, 200, size=(1000, 6))
+    # Include endpoints and half-tick commands to protect round-to-even order.
+    values[:3] = [-100, 0, 100, -100, 100, 0]
+    fractions = (np.arange(6) + 1000.5 - tables.range_min) / tables.span
+    values[3] = np.where(tables.gripper_mask, fractions * 100, fractions * 200 - 100)
+    lower = np.where(tables.gripper_mask, 0.0, -100.0)
+    upper = np.where(tables.gripper_mask, 100.0, 100.0)
+    clamped = np.clip(values, lower, upper)
+    span = np.where(tables.valid, tables.span, 1.0)
+    fraction = np.where(tables.gripper_mask, clamped / 100.0, (clamped + 100.0) / 200.0)
+    ticks = np.clip(np.round(tables.range_min + fraction * span), tables.range_min, tables.range_max)
+    fallback = np.clip(tables.homing_offset, tables.range_min, tables.range_max)
+    expected = np.where(tables.valid, ticks, fallback).astype(np.int32)
+    actual = tables.normalized_to_ticks(values)
+    assert actual.dtype == np.int32
+    np.testing.assert_array_equal(actual, expected)
 
 
 @pytest.mark.parametrize("unit", ["normalized", "degrees"])
