@@ -150,13 +150,17 @@ class SimulationLaunch(Generic[_PayloadT]):
         if not self.scenes:
             msg = "scenes must not be empty"
             raise ValueError(msg)
-        ids = [scene.id for scene in self.scenes]
-        duplicates = sorted({scene_id for scene_id in ids if ids.count(scene_id) > 1})
+        ids: set[str] = set()
+        duplicates: set[str] = set()
+        for scene in self.scenes:
+            if scene.id in ids:
+                duplicates.add(scene.id)
+            ids.add(scene.id)
         if duplicates:
-            msg = f"scene ids must be unique, got duplicates {duplicates}"
+            msg = f"scene ids must be unique, got duplicates {sorted(duplicates)}"
             raise ValueError(msg)
         if self.default_scene not in ids:
-            msg = f"default_scene {self.default_scene!r} is not one of the scenes {ids}"
+            msg = f"default_scene {self.default_scene!r} is not one of the scenes {[scene.id for scene in self.scenes]}"
             raise ValueError(msg)
         if self.max_seed is not None and (type(self.max_seed) is not int or self.max_seed < 0):
             msg = f"max_seed must be a non-negative integer or None, got {self.max_seed!r}"
@@ -246,7 +250,11 @@ class SimulationLaunch(Generic[_PayloadT]):
             ValueError: If the scene is unknown or the seed is out of range (any seed when
                 ``max_seed`` is ``None``).
         """
-        if scene not in {known.id for known in self.scenes}:
+        # A request needs only a match, not a fresh index of the whole catalog.
+        for known in self.scenes:
+            if scene == known.id:
+                break
+        else:
             msg = f"Unknown scene {scene!r}; choose one of {[known.id for known in self.scenes]}"
             raise ValueError(msg)
         if seed is not None:
