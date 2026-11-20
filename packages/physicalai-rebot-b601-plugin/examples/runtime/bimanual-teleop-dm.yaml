@@ -1,0 +1,35 @@
+# Two Star Arm HD leaders driving two ReBot B601 DM followers.
+# Review all ports, calibrate both pairs, and clear the work area before running.
+# Each follower needs a separate adapter because both arms use the same motor IDs.
+
+runtime:
+  robot:
+    class_path: physicalai_rebot_b601_plugin.BimanualReBotB601
+    init_args:
+      left:
+        class_path: physicalai_rebot_b601_plugin.ReBotB601DM
+        init_args:
+          port: /dev/ttyACM0 # CHANGE_ME: left follower adapter
+      right:
+        class_path: physicalai_rebot_b601_plugin.ReBotB601DM
+        init_args:
+          port: /dev/ttyACM1 # CHANGE_ME: right follower adapter
+
+  action_source:
+    class_path: physicalai.runtime.TeleopSource
+    init_args:
+      leader:
+        class_path: physicalai_stararm_plugin.BimanualStarArm102
+        init_args:
+          left:
+            class_path: physicalai_stararm_plugin.StarArm102HDLeader
+            init_args:
+              port: /dev/ttyUSB0 # CHANGE_ME: left leader
+              follower_profile: b601
+          right:
+            class_path: physicalai_stararm_plugin.StarArm102HDLeader
+            init_args:
+              port: /dev/ttyUSB1 # CHANGE_ME: right leader
+              follower_profile: b601
+
+  fps: 30.0

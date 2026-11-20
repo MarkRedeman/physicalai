@@ -69,14 +69,17 @@ def test_definitions_count() -> None:
     from physicalai_rebot_b601_plugin.studio_catalog import _definitions
 
     defs = _definitions()
-    assert len(defs) == 2
+    assert len(defs) == 4
 
 
 def test_definitions_have_expected_types() -> None:
     from physicalai_rebot_b601_plugin.studio_catalog import _definitions
 
     types = {d.type for d in _definitions()}
-    assert types == {"ReBot_B601_DM_Follower", "ReBot_B601_RS_Follower"}
+    assert types == {
+        "ReBot_B601_DM_Follower", "ReBot_B601_RS_Follower",
+        "ReBot_Bimanual_B601_DM_Follower", "ReBot_Bimanual_B601_RS_Follower",
+    }
 
 
 def test_register_physicalai_studio_plugin() -> None:
@@ -84,7 +87,7 @@ def test_register_physicalai_studio_plugin() -> None:
 
     registry = _FakeRegistry()
     register_physicalai_studio_plugin(registry)
-    assert len(registry.definitions) == 2
+    assert len(registry.definitions) == 4
 
 
 def test_dm_follower_structure() -> None:
@@ -105,7 +108,10 @@ def test_definition_robot_type_property() -> None:
     from physicalai_rebot_b601_plugin.studio_catalog import _definitions
 
     for d in _definitions():
-        assert d.type in {"ReBot_B601_DM_Follower", "ReBot_B601_RS_Follower"}
+        assert d.type in {
+            "ReBot_B601_DM_Follower", "ReBot_B601_RS_Follower",
+            "ReBot_Bimanual_B601_DM_Follower", "ReBot_Bimanual_B601_RS_Follower",
+        }
 
 
 def test_dm_follower_has_robot_builder() -> None:
