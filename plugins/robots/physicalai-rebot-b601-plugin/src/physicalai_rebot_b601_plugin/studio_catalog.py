@@ -41,8 +41,6 @@ from physicalai_rebot_b601_plugin.constants import (
 if TYPE_CHECKING:
     from typing import Protocol
 
-    from physicalai.robot.interface import Robot as PhysicalAIRobot
-
     class _RobotCatalogRegistry(Protocol):
         def register_robot(self, definition: RobotCatalogDefinition) -> None: ...
 
@@ -285,7 +283,7 @@ _REBOT_PROBE = ReBotProbe()
 async def _build_rebot_b601_dm_driver(
     robot: PayloadContainer[ReBotB601DMPayload],
     factory: CatalogRobotFactory,
-) -> PhysicalAIRobot:
+) -> ReBotB601DM:
     raw = robot.payload
     if isinstance(raw, BaseModel) and type(raw) is not ReBotB601DMPayload:
         raw = raw.model_dump()
@@ -470,10 +468,10 @@ class ReBotRSProbe(RobotProbe[ReBotB601RSPayload]):
 _REBOT_RS_PROBE = ReBotRSProbe()
 
 
-async def _build_rebot_b601_rs_driver(  # noqa: RUF029 - Studio awaits every robot builder
+async def _build_rebot_b601_rs_driver(  # ruff: ignore[unused-async] - Studio awaits every robot builder
     robot: PayloadContainer[ReBotB601RSPayload],
     factory: CatalogRobotFactory,
-) -> PhysicalAIRobot:
+) -> ReBotB601RS:
     _ = factory  # SocketCAN interfaces are network devices, so there is no serial port to resolve.
     raw = robot.payload
     if isinstance(raw, BaseModel) and type(raw) is not ReBotB601RSPayload:
@@ -517,6 +515,11 @@ _REBOT_B601_ZERO_CALIBRATION = RobotZeroCalibration[ReBotB601DM](
 
 
 def _definitions() -> list[RobotCatalogDefinition]:
+    # Import after single-arm payloads and builders are defined to avoid a catalog import cycle.
+    from physicalai_rebot_b601_plugin.bimanual_studio_catalog import (  # ruff: ignore[import-outside-top-level]
+        get_bimanual_definitions,
+    )
+
     return [
         RobotCatalogDefinition(
             type="ReBot_B601_DM_Follower",
@@ -538,6 +541,7 @@ def _definitions() -> list[RobotCatalogDefinition]:
             probe=_REBOT_RS_PROBE,
             zero_calibration=_REBOT_B601_ZERO_CALIBRATION,
         ),
+        *get_bimanual_definitions(),
     ]
 
 

@@ -3,9 +3,8 @@ from __future__ import annotations
 import math
 import sys
 from dataclasses import dataclass
-from importlib import import_module
 from importlib.machinery import ModuleSpec
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 import numpy as np
@@ -18,17 +17,9 @@ from physicalai_rebot_b601_plugin.constants import (
     REBOT_B601_RS_JOINT_ORDER,
 )
 
-if TYPE_CHECKING:
-    from collections.abc import Generator
-
 _mock_motorbridge = MagicMock()
 _mock_motorbridge.__spec__ = ModuleSpec("motorbridge", None)
 sys.modules.setdefault("motorbridge", _mock_motorbridge)
-
-
-class _RebotPackageModule:
-    dm: object
-    rs: object
 
 
 @dataclass(frozen=True)
@@ -60,24 +51,15 @@ def _make_mock_motorbridge() -> MagicMock:
 
 
 @pytest.fixture
-def mock_motorbridge(monkeypatch: pytest.MonkeyPatch) -> Generator[MagicMock]:
+def mock_motorbridge(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    from physicalai_rebot_b601_plugin import dm, rs
+
     module = _make_mock_motorbridge()
-    pkg = sys.modules.get("physicalai_rebot_b601_plugin")
-    sys.modules.pop("physicalai_rebot_b601_plugin.dm", None)
-    sys.modules.pop("physicalai_rebot_b601_plugin.rs", None)
-    sys.modules.pop("physicalai_rebot_b601_plugin", None)
-    if pkg is not None and hasattr(pkg, "dm"):
-        del cast("_RebotPackageModule", pkg).dm
-    if pkg is not None and hasattr(pkg, "rs"):
-        del cast("_RebotPackageModule", pkg).rs
-    # setitem restores only this key; patch.dict(sys.modules) would also drop
-    # every module imported during the test (e.g. loguru, multiprocessing).
-    monkeypatch.setitem(sys.modules, "motorbridge", module)
-    import_module("physicalai_rebot_b601_plugin.rs")
-    yield module
-    sys.modules.pop("physicalai_rebot_b601_plugin.dm", None)
-    sys.modules.pop("physicalai_rebot_b601_plugin.rs", None)
-    sys.modules.pop("physicalai_rebot_b601_plugin", None)
+    # Keep driver class identities stable for catalog and config round-tripping.
+    for driver_module in (dm, rs):
+        monkeypatch.setattr(driver_module, "Controller", module.Controller)
+        monkeypatch.setattr(driver_module, "Mode", module.Mode)
+    return module
 
 
 # Turns off the feedforward and motion shaping so tests can check the raw command mapping.
@@ -975,4 +957,3 @@ class TestReBotB601RSLiveControl:
         robot.set_control(gravity_compensation=0.25)
 
         assert robot._gravity_torques(command) == pytest.approx(0.25 * full)
-

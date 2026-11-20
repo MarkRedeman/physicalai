@@ -4,9 +4,8 @@ import itertools
 import math
 import sys
 from dataclasses import dataclass
-from importlib import import_module
 from importlib.machinery import ModuleSpec
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any
 from unittest.mock import MagicMock, call
 
 import numpy as np
@@ -19,16 +18,9 @@ from physicalai_rebot_b601_plugin.constants import (
     REBOT_B601_DM_POS_VEL_DEG_S,
 )
 
-if TYPE_CHECKING:
-    from collections.abc import Generator
-
 _mock_motorbridge = MagicMock()
 _mock_motorbridge.__spec__ = ModuleSpec("motorbridge", None)
 sys.modules.setdefault("motorbridge", _mock_motorbridge)
-
-
-class _RebotPackageModule:
-    dm: object
 
 
 @dataclass(frozen=True)
@@ -63,20 +55,14 @@ def _make_mock_motorbridge() -> MagicMock:
 
 
 @pytest.fixture
-def mock_motorbridge(monkeypatch: pytest.MonkeyPatch) -> Generator[MagicMock]:
+def mock_motorbridge(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    from physicalai_rebot_b601_plugin import dm
+
     module = _make_mock_motorbridge()
-    sys.modules.pop("physicalai_rebot_b601_plugin.dm", None)
-    sys.modules.pop("physicalai_rebot_b601_plugin", None)
-    pkg = sys.modules.get("physicalai_rebot_b601_plugin")
-    if pkg is not None and hasattr(pkg, "dm"):
-        del cast("_RebotPackageModule", pkg).dm
-    # setitem restores only this key; patch.dict(sys.modules) would also drop
-    # every module imported during the test (e.g. loguru, multiprocessing).
-    monkeypatch.setitem(sys.modules, "motorbridge", module)
-    import_module("physicalai_rebot_b601_plugin.dm")
-    yield module
-    sys.modules.pop("physicalai_rebot_b601_plugin.dm", None)
-    sys.modules.pop("physicalai_rebot_b601_plugin", None)
+    # Keep driver class identities stable for composite, catalog, and config users.
+    monkeypatch.setattr(dm, "Controller", module.Controller)
+    monkeypatch.setattr(dm, "Mode", module.Mode)
+    return module
 
 
 # Turns off the feedforward and motion shaping so tests can check the raw command mapping.
@@ -1151,4 +1137,3 @@ class TestReBotB601DMSafety:
         sent = np.array(_sent_public_deg(robot, motors, 0))
         acceleration = np.abs(np.diff(sent, 2)) / dt / dt
         assert acceleration.max() <= REBOT_B601_MAX_ACCEL_DEG_S2["4340P"] + 1e-6
-

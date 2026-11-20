@@ -1,0 +1,35 @@
+# Two Star Arm HD leaders driving two ReBot B601 RS followers.
+# Review all ports, calibrate both pairs, and clear the work area before running.
+# Bring up two separate SocketCAN interfaces at 1 Mbit/s before connecting.
+
+runtime:
+  robot:
+    class_path: physicalai_rebot_b601_plugin.BimanualReBotB601
+    init_args:
+      left:
+        class_path: physicalai_rebot_b601_plugin.ReBotB601RS
+        init_args:
+          port: can0 # CHANGE_ME: left follower CAN interface
+      right:
+        class_path: physicalai_rebot_b601_plugin.ReBotB601RS
+        init_args:
+          port: can1 # CHANGE_ME: right follower CAN interface
+
+  action_source:
+    class_path: physicalai.runtime.TeleopSource
+    init_args:
+      leader:
+        class_path: physicalai_stararm_plugin.BimanualStarArm102
+        init_args:
+          left:
+            class_path: physicalai_stararm_plugin.StarArm102HDLeader
+            init_args:
+              port: /dev/ttyUSB0 # CHANGE_ME: left leader
+              follower_profile: b601
+          right:
+            class_path: physicalai_stararm_plugin.StarArm102HDLeader
+            init_args:
+              port: /dev/ttyUSB1 # CHANGE_ME: right leader
+              follower_profile: b601
+
+  fps: 30.0

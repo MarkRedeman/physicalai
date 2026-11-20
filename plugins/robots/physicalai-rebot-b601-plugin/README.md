@@ -9,6 +9,7 @@ Third-party Seeed reBot B601 robot arm plugin for [PhysicalAI](https://github.co
 
 - Concrete implementations of the `Robot` protocol — no inheritance or registration required
 - B601-DM (Damiao) and B601-RS (RobStride) follower drivers
+- Bimanual DM and RS pairs with 14-joint observations and actions
 - Gravity and velocity feedforward in MIT mode, a smooth start-up move, and a fold into the rest
   pose on disconnect (see [Control](#control))
 - Optional Star Arm leader → follower teleoperation
@@ -141,6 +142,47 @@ with connect(robot) as arm:
 
 All classes satisfy `isinstance(robot, Robot)` — no inheritance or registration
 required. Use with `physicalai.robot.connect` and `physicalai.robot.verify_robot`.
+
+## Bimanual setup
+
+`BimanualReBotB601` composes two matching `ReBotB601DM` or `ReBotB601RS`
+followers using Runtime's shared `BimanualRobot` implementation:
+
+```python
+from physicalai_rebot_b601_plugin import BimanualReBotB601, ReBotB601RS
+
+robot = BimanualReBotB601(
+    left=ReBotB601RS(port="can0"),
+    right=ReBotB601RS(port="can1"),
+)
+```
+
+Observations and actions contain exactly **14 joint positions in degrees**, left
+arm first, then right arm. Joint names use `left_` and `right_` prefixes. Each
+arm retains its own control, motion-limit, gravity, and parking settings; access
+the single-arm drivers through `robot.left` and `robot.right`.
+
+Use separate serial adapters or CAN interfaces: both arms use the same motor
+IDs and cannot share a bus. Mixed DM/RS pairs and duplicate connections are
+rejected. Connections roll back if the second arm fails to connect; disconnect
+attempts to release both arms even if one fails.
+
+Studio registers **ReBot Bimanual B601 DM Follower** and **ReBot Bimanual B601 RS
+Follower**, with separate nested left/right settings and guided zero calibration
+for both arms. Restart Studio after installing the updated plugin. These entries
+do not yet have bimanual URDF previews.
+
+To teleoperate with two Star Arm leaders, set `follower_profile="b601"` on both.
+Review the ports, calibrate both pairs, and clear the work area before running:
+
+```bash
+uv run --extra plugin-rebot-b601 --extra plugin-stararm physicalai run --config plugins/robots/physicalai-rebot-b601-plugin/examples/runtime/bimanual-teleop-dm.yaml
+uv run --extra plugin-rebot-b601 --extra plugin-stararm physicalai run --config plugins/robots/physicalai-rebot-b601-plugin/examples/runtime/bimanual-teleop-rs.yaml
+```
+
+`robot.disable_torque()` releases both arms; support them before calling it.
+`robot.set_zero_position()` stores both current poses as zero. Individual driver
+methods remain available on `left` and `right`.
 
 ## Run with the PhysicalAI CLI
 

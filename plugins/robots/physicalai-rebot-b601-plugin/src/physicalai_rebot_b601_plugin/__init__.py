@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-# ruff: noqa: PLC0415
+# ruff: file-ignore[import-outside-top-level]
 
 """Third-party Seeed reBot B601 robot arm plugin for PhysicalAI.
 
@@ -18,12 +18,18 @@ from typing import TYPE_CHECKING
 from physicalai_rebot_b601_plugin._urdf import get_urdf_path as get_urdf_path
 
 if TYPE_CHECKING:
+    from physicalai_rebot_b601_plugin.bimanual_rebot_b601 import BimanualReBotB601 as BimanualReBotB601
+    from physicalai_rebot_b601_plugin.bimanual_rebot_b601 import (
+        BimanualReBotB601Observation as BimanualReBotB601Observation,
+    )
     from physicalai_rebot_b601_plugin.dm import ReBotB601DM as ReBotB601DM
     from physicalai_rebot_b601_plugin.dm import ReBotB601DMObservation as ReBotB601DMObservation
     from physicalai_rebot_b601_plugin.rs import ReBotB601RS as ReBotB601RS
     from physicalai_rebot_b601_plugin.rs import ReBotB601RSObservation as ReBotB601RSObservation
 
 __all__ = [
+    "BimanualReBotB601",
+    "BimanualReBotB601Observation",
     "ReBotB601DM",
     "ReBotB601DMObservation",
     "ReBotB601RS",
@@ -33,6 +39,10 @@ __all__ = [
 
 
 def __getattr__(name: str) -> object:
+    if name in {"BimanualReBotB601", "BimanualReBotB601Observation"}:
+        from physicalai_rebot_b601_plugin import bimanual_rebot_b601
+
+        return getattr(bimanual_rebot_b601, name)
     if name == "ReBotB601DM":
         from physicalai_rebot_b601_plugin.dm import ReBotB601DM
 
