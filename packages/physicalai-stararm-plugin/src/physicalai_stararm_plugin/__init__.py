@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-# ruff: noqa: PLC0415
+# ruff: file-ignore[import-outside-top-level]
 
 """Star Arm 102 plugin for PhysicalAI.
 
@@ -16,6 +16,10 @@ from typing import TYPE_CHECKING
 from physicalai_stararm_plugin._urdf import get_urdf_path as get_urdf_path
 
 if TYPE_CHECKING:
+    from physicalai_stararm_plugin.bimanual_stararm102 import BimanualStarArm102 as BimanualStarArm102
+    from physicalai_stararm_plugin.bimanual_stararm102 import (
+        BimanualStarArm102Observation as BimanualStarArm102Observation,
+    )
     from physicalai_stararm_plugin.stararm102fl import StarArm102FLFollower as StarArm102FLFollower
     from physicalai_stararm_plugin.stararm102fl import (
         StarArm102FLFollowerObservation as StarArm102FLFollowerObservation,
@@ -27,6 +31,8 @@ if TYPE_CHECKING:
     from physicalai_stararm_plugin.stararm102ld import StarArm102LDLeader as StarArm102LDLeader
 
 __all__ = [
+    "BimanualStarArm102",
+    "BimanualStarArm102Observation",
     "StarArm102FLFollower",
     "StarArm102FLFollowerObservation",
     "StarArm102HDLeader",
@@ -37,6 +43,10 @@ __all__ = [
 
 
 def __getattr__(name: str) -> object:
+    if name in {"BimanualStarArm102", "BimanualStarArm102Observation"}:
+        from physicalai_stararm_plugin import bimanual_stararm102
+
+        return getattr(bimanual_stararm102, name)
     if name == "StarArm102HDLeader":
         from physicalai_stararm_plugin.stararm102hd import StarArm102HDLeader
 
