@@ -1,0 +1,34 @@
+# Two Star Arm HD leaders driving two Star Arm FL followers.
+# Review the four ports, calibrate both pairs, and clear the work area before running.
+
+runtime:
+  robot:
+    class_path: physicalai_stararm_plugin.BimanualStarArm102
+    init_args:
+      left:
+        class_path: physicalai_stararm_plugin.StarArm102FLFollower
+        init_args:
+          port: /dev/ttyUSB2 # CHANGE_ME: left follower
+      right:
+        class_path: physicalai_stararm_plugin.StarArm102FLFollower
+        init_args:
+          port: /dev/ttyUSB3 # CHANGE_ME: right follower
+
+  action_source:
+    class_path: physicalai.runtime.TeleopSource
+    init_args:
+      leader:
+        class_path: physicalai_stararm_plugin.BimanualStarArm102
+        init_args:
+          left:
+            class_path: physicalai_stararm_plugin.StarArm102HDLeader
+            init_args:
+              port: /dev/ttyUSB0 # CHANGE_ME: left leader
+              follower_profile: null # Native Star Arm frame for an FL follower
+          right:
+            class_path: physicalai_stararm_plugin.StarArm102HDLeader
+            init_args:
+              port: /dev/ttyUSB1 # CHANGE_ME: right leader
+              follower_profile: null
+
+  fps: 30.0

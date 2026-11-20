@@ -52,14 +52,17 @@ def test_definitions_count() -> None:
     from physicalai_stararm_plugin.studio_catalog import _definitions
 
     defs = _definitions()
-    assert len(defs) == 3
+    assert len(defs) == 6
 
 
 def test_definitions_have_expected_types() -> None:
     from physicalai_stararm_plugin.studio_catalog import _definitions
 
     types = {d.type for d in _definitions()}
-    assert types == {"StarArm_102_LD_Leader", "StarArm_102_HD_Leader", "StarArm_102_FL_Follower"}
+    assert types == {
+        "StarArm_102_LD_Leader", "StarArm_102_HD_Leader", "StarArm_102_FL_Follower",
+        "StarArm_Bimanual_102_LD_Leader", "StarArm_Bimanual_102_HD_Leader", "StarArm_Bimanual_102_FL_Follower",
+    }
 
 
 def test_register_physicalai_studio_plugin() -> None:
@@ -67,7 +70,7 @@ def test_register_physicalai_studio_plugin() -> None:
 
     registry = _FakeRegistry()
     register_physicalai_studio_plugin(registry)
-    assert len(registry.definitions) == 3
+    assert len(registry.definitions) == 6
 
 
 def test_ld_leader_structure() -> None:

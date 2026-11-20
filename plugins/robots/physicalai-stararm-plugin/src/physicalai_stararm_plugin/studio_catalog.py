@@ -28,8 +28,6 @@ from physicalai_stararm_plugin import StarArm102FLFollower, StarArm102HDLeader, 
 if TYPE_CHECKING:
     from typing import Protocol
 
-    from physicalai.robot.interface import Robot as PhysicalAIRobot
-
     class _RobotCatalogRegistry(Protocol):
         def register_robot(self, definition: RobotCatalogDefinition) -> None: ...
 
@@ -281,7 +279,7 @@ _STAR_ARM_PROBE = StarArmProbe()
 async def _build_stararm_102_hd_driver(
     robot: PayloadContainer[StarArm102HDPayload],
     factory: CatalogRobotFactory,
-) -> PhysicalAIRobot:
+) -> StarArm102HDLeader:
     raw = robot.payload
     if isinstance(raw, BaseModel) and type(raw) is not StarArm102HDPayload:
         raw = raw.model_dump()
@@ -313,7 +311,7 @@ async def _build_stararm_102_hd_driver(
 async def _build_stararm_102_fl_driver(
     robot: PayloadContainer[StarArm102FLPayload],
     factory: CatalogRobotFactory,
-) -> PhysicalAIRobot:
+) -> StarArm102FLFollower:
     raw = robot.payload
     if isinstance(raw, BaseModel) and type(raw) is not StarArm102FLPayload:
         raw = raw.model_dump()
@@ -343,7 +341,7 @@ async def _build_stararm_102_fl_driver(
 async def _build_stararm_102_ld_driver(
     robot: PayloadContainer[StarArm102LDPayload],
     factory: CatalogRobotFactory,
-) -> PhysicalAIRobot:
+) -> StarArm102LDLeader:
     raw = robot.payload
     if isinstance(raw, BaseModel) and type(raw) is not StarArm102LDPayload:
         raw = raw.model_dump()
@@ -390,6 +388,11 @@ _STAR_ARM_102_LEADER_ZERO_CALIBRATION = RobotZeroCalibration[StarArm102HDLeader]
 
 
 def _definitions() -> list[RobotCatalogDefinition]:
+    # Import after single-arm payloads and builders are defined to avoid a catalog import cycle.
+    from physicalai_stararm_plugin.bimanual_studio_catalog import (  # ruff: ignore[import-outside-top-level]
+        get_bimanual_definitions,
+    )
+
     return [
         RobotCatalogDefinition(
             type="StarArm_102_LD_Leader",
@@ -420,6 +423,7 @@ def _definitions() -> list[RobotCatalogDefinition]:
             asset=_STAR_ARM_102_FL_ASSET,
             probe=_STAR_ARM_PROBE,
         ),
+        *get_bimanual_definitions(),
     ]
 
 
