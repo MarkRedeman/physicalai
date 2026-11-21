@@ -6,8 +6,10 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
+from xml.etree import ElementTree as ET
 
 import pytest
+from defusedxml.ElementTree import parse
 from physicalai.config import Config
 from physicalai.robot import Robot
 from physicalai_studio_plugin import RobotCatalogDefinition, SerialPortInfo, validate_robot_payload_ui
@@ -69,7 +71,7 @@ def test_builds_disconnected_serializable_pair(definition: RobotCatalogDefinitio
     assert Config.from_instance(driver).instantiate().device_ids == driver.device_ids
     assert definition.role == driver.role == "follower"
     assert definition.zero_calibration is not None
-    assert definition.asset is None  # Never present a single-arm URDF as a bimanual preview.
+    assert definition.asset is not None
     if "DM" in definition.type:
         assert [p.serial_number for p in factory.calls] == ["LEFT", "RIGHT"]
         assert (driver.left.port, driver.right.port) == ("left-port", "right-port")
@@ -130,3 +132,97 @@ def test_rs_probe_checks_both_can_interfaces(monkeypatch: pytest.MonkeyPatch, tm
     (tmp_path / "can1/operstate").write_text("up", encoding="utf-8")
     assert asyncio.run(definition.probe.is_online(payload))
     assert asyncio.run(definition.probe.discover(SimpleNamespace())) == []
+
+
+def test_bimanual_asset_tree_and_joint_mapping(definition: RobotCatalogDefinition) -> None:
+    from physicalai_rebot_b601_plugin.studio_catalog import _definitions
+
+    asset = definition.asset
+    single = next(d.asset for d in _definitions() if d.type == definition.type.replace("Bimanual_", ""))
+    assert asset is not None and single is not None
+    assert asset.root_resolver is not None and single.root_resolver is not None
+    root = asset.root_resolver()
+    variant = "rs" if "RS" in definition.type else "dm"
+    assert asset.urdf_relative_path == Path(f"rebot-b601-{variant}/urdf/rebot_b601_bimanual_{variant}.urdf")
+    assert asset.packages == single.packages
+    robot = parse(root / asset.urdf_relative_path).getroot()
+    arm = parse(single.root_resolver() / single.urdf_relative_path).getroot()
+    links = [link.attrib["name"] for link in robot.findall("link")]
+    joints = {joint.attrib["name"]: joint for joint in robot.findall("joint")}
+    assert len(links) == len(set(links)) == 1 + 2 * len(arm.findall("link"))
+    assert len(joints) == len(robot.findall("joint")) == 2 + 2 * len(arm.findall("joint"))
+    parents = {joint.find("child").attrib["link"]: joint.find("parent").attrib["link"] for joint in joints.values()}
+    assert len(parents) == len(joints)
+    assert set(links) - parents.keys() == {"world"}
+    for link in links:
+        visited = set()
+        while link != "world":
+            assert link not in visited
+            visited.add(link)
+            link = parents[link]
+    expected_map = {
+        f"{side}_{key}": [f"{side}_{joint}" for joint in names]
+        for side in ("left", "right")
+        for key, names in single.joint_map.items()
+    }
+    assert asset.joint_map == expected_map
+    assert len(asset.joint_map) == 14
+    for names in asset.joint_map.values():
+        assert all(name in joints and joints[name].attrib["type"] == "revolute" for name in names)
+    for side, offset in (("left", "0 0.2 0"), ("right", "0 -0.2 0")):
+        mount = joints[f"{side}_mount"]
+        assert mount.attrib["type"] == "fixed"
+        assert mount.find("origin").attrib == {"xyz": offset, "rpy": "0 0 0"}
+        assert mount.find("parent").attrib["link"] == "world"
+        assert mount.find("child").attrib["link"] == f"{side}_base_link"
+        for original in arm.findall("joint"):
+            copied = joints[f"{side}_{original.attrib['name']}"]
+            assert copied.attrib["type"] == original.attrib["type"]
+            for tag in ("origin", "axis", "limit"):
+                before, after = original.find(tag), copied.find(tag)
+                if before is None:
+                    assert after is None
+                else:
+                    assert after is not None and after.attrib == before.attrib
+            for tag in ("parent", "child"):
+                assert copied.find(tag).attrib["link"] == f"{side}_{original.find(tag).attrib['link']}"
+            mimic = original.find("mimic")
+            if mimic is not None:
+                assert copied.find("mimic").attrib == {**mimic.attrib, "joint": f"{side}_{mimic.attrib['joint']}"}
+                assert copied.find("mimic").attrib["joint"] in joints
+
+
+def test_bimanual_asset_preserves_link_geometry_and_shares_meshes(definition: RobotCatalogDefinition) -> None:
+    from physicalai_rebot_b601_plugin.studio_catalog import _definitions
+
+    asset = definition.asset
+    single = next(d.asset for d in _definitions() if d.type == definition.type.replace("Bimanual_", ""))
+    root = asset.root_resolver()
+    robot = parse(root / asset.urdf_relative_path).getroot()
+    arm = parse(root / single.urdf_relative_path).getroot()
+    material_names = [material.attrib["name"] for material in robot.findall("material")]
+    assert len(material_names) == len(set(material_names)) == len(arm.findall("material"))
+    assert {m.attrib["name"] for m in robot.findall(".//visual/material")} <= set(material_names)
+    package_name = next(iter(asset.packages))
+    for side in ("left", "right"):
+        for original in arm.findall("link"):
+            copied = robot.find(f"link[@name='{side}_{original.attrib['name']}']")
+            assert copied is not None
+            inertial = original.find("inertial")
+            if inertial is not None:
+                assert ET.canonicalize(
+                    ET.tostring(copied.find("inertial"), encoding="unicode"), strip_text=True
+                ) == ET.canonicalize(ET.tostring(inertial, encoding="unicode"), strip_text=True)
+            for tag in ("visual", "collision"):
+                assert len(copied.findall(tag)) == len(original.findall(tag))
+                for before, after in zip(original.findall(tag), copied.findall(tag), strict=True):
+                    assert before.find("origin").attrib == after.find("origin").attrib
+                    before_mesh = before.find("geometry/mesh").attrib
+                    after_mesh = after.find("geometry/mesh").attrib
+                    assert after_mesh == {
+                        **before_mesh,
+                        "filename": f"package://{package_name}/{before_mesh['filename']}",
+                    }
+    for mesh in robot.findall(".//mesh"):
+        package, relative = mesh.attrib["filename"].removeprefix("package://").split("/", 1)
+        assert (root / asset.packages[package] / relative).is_file()

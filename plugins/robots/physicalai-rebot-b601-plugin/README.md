@@ -169,8 +169,19 @@ attempts to release both arms even if one fails.
 
 Studio registers **ReBot Bimanual B601 DM Follower** and **ReBot Bimanual B601 RS
 Follower**, with separate nested left/right settings and guided zero calibration
-for both arms. Restart Studio after installing the updated plugin. These entries
-do not yet have bimanual URDF previews.
+for both arms and bimanual 3D previews. Restart Studio after installing the updated plugin.
+
+The bundled bimanual descriptions reuse the DM and RS meshes and preserve each
+arm's joint frame, limits, and gripper mimic chain:
+
+- `rebot-b601-dm/urdf/rebot_b601_bimanual_dm.urdf`
+- `rebot-b601-rs/urdf/rebot_b601_bimanual_rs.urdf`
+
+Paths are relative to `get_urdf_path()`. Both descriptions have a shared `world`
+root and fixed `left_mount` / `right_mount` joints at y=+0.2 / -0.2 m, matching
+the SO-101 bimanual layout. The mounts define the preview layout, not a measured
+robot-cell calibration; adjust them to match your installation before using
+the model for spatial planning. Each arm retains its original orientation.
 
 To teleoperate with two Star Arm leaders, set `follower_profile="b601"` on both.
 Review the ports, calibrate both pairs, and clear the work area before running:
@@ -245,6 +256,14 @@ against holding torques measured on a real arm (reBotArm_control_py, July 2026).
 ```bash
 uv sync
 uv run pytest plugins/robots/physicalai-rebot-b601-plugin/tests/
+```
+
+After changing a single-arm URDF, regenerate the bimanual descriptions from the
+repository root:
+
+```bash
+uv run --extra plugin-rebot-b601 python .github/scripts/generate_bimanual_urdfs.py
+uv run --extra plugin-rebot-b601 python .github/scripts/generate_bimanual_urdfs.py --check
 ```
 
 ## Acknowledgments
