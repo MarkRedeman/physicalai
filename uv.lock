@@ -2159,11 +2159,13 @@ dependencies = [
 
 [package.optional-dependencies]
 tests = [
+    { name = "defusedxml" },
     { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "defusedxml", marker = "extra == 'tests'", specifier = ">=0.7.1" },
     { name = "loguru", specifier = ">=0.7" },
     { name = "motorbridge-smart-servo", specifier = ">=0.0.4" },
     { name = "numpy", specifier = ">=1.24" },

@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Generic, TypeVar
 
 from physicalai_studio_plugin import (
     CatalogRobotFactory,
     PayloadContainer,
     PortScanner,
+    RobotAsset,
     RobotCatalogDefinition,
     RobotZeroCalibration,
     SerialPortInfo,
@@ -21,6 +23,9 @@ from pydantic import BaseModel, Field
 
 from physicalai_stararm_plugin import BimanualStarArm102
 from physicalai_stararm_plugin.studio_catalog import (
+    _STAR_ARM_102_FL_ASSET,
+    _STAR_ARM_102_HD_ASSET,
+    _STAR_ARM_102_LD_ASSET,
     _STAR_ARM_PROBE,
     StarArm102FLPayload,
     StarArm102HDPayload,
@@ -31,6 +36,29 @@ from physicalai_stararm_plugin.studio_catalog import (
 )
 
 _PayloadT = TypeVar("_PayloadT", bound=BaseModel)
+
+
+def _bimanual_asset(single_arm: RobotAsset, urdf_path: str) -> RobotAsset:
+    """Prefix single-arm observation keys and both gripper-joint targets.
+
+    Returns:
+        A bimanual asset sharing the single-arm mesh packages and root resolver.
+    """
+    return RobotAsset(
+        urdf_relative_path=Path(urdf_path),
+        packages=single_arm.packages,
+        joint_map={
+            f"{side}_{key}": [f"{side}_{joint}" for joint in joints]
+            for side in ("left", "right")
+            for key, joints in single_arm.joint_map.items()
+        },
+        root_resolver=single_arm.root_resolver,
+    )
+
+
+_BIMANUAL_LD_ASSET = _bimanual_asset(_STAR_ARM_102_LD_ASSET, "stararm102/urdf/stararm102_bimanual_ld_description.urdf")
+_BIMANUAL_HD_ASSET = _bimanual_asset(_STAR_ARM_102_HD_ASSET, "stararm102/urdf/stararm102_bimanual_hd_description.urdf")
+_BIMANUAL_FL_ASSET = _bimanual_asset(_STAR_ARM_102_FL_ASSET, "stararm102/urdf/stararm102_bimanual_fl_description.urdf")
 
 
 @dataclass
@@ -153,6 +181,7 @@ def get_bimanual_definitions() -> list[RobotCatalogDefinition]:
             role="leader",
             robot_builder=_build_bimanual_ld,
             robot_payload=BimanualStarArm102LDPayload,
+            asset=_BIMANUAL_LD_ASSET,
             probe=_BIMANUAL_PROBE,
             zero_calibration=_LEADER_ZERO_CALIBRATION,
         ),
@@ -162,6 +191,7 @@ def get_bimanual_definitions() -> list[RobotCatalogDefinition]:
             role="leader",
             robot_builder=_build_bimanual_hd,
             robot_payload=BimanualStarArm102HDPayload,
+            asset=_BIMANUAL_HD_ASSET,
             probe=_BIMANUAL_PROBE,
             zero_calibration=_LEADER_ZERO_CALIBRATION,
         ),
@@ -171,6 +201,7 @@ def get_bimanual_definitions() -> list[RobotCatalogDefinition]:
             role="follower",
             robot_builder=_build_bimanual_fl,
             robot_payload=BimanualStarArm102FLPayload,
+            asset=_BIMANUAL_FL_ASSET,
             probe=_BIMANUAL_PROBE,
         ),
     ]

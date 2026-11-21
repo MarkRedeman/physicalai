@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-tests = ["pytest"]
+tests = ["pytest", "defusedxml>=0.7.1"]
 
 [project.urls]
 Homepage = "https://github.com/openvinotoolkit/physicalai"
