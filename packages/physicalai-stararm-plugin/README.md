@@ -71,9 +71,21 @@ remain available through `leader.left` and `leader.right`.
 
 Studio registers **Star Arm Bimanual 102-LD Leader**, **Star Arm Bimanual 102-HD
 Leader**, and **Star Arm Bimanual 102-FL Follower** with separate nested left/right
-settings. Both leader types offer guided zero calibration for both arms. Restart
-Studio after installing the updated plugin. These entries do not yet have
-bimanual URDF previews.
+settings and bimanual 3D previews. Both leader types offer guided zero calibration
+for both arms. Restart Studio after installing the updated plugin.
+
+The bundled bimanual descriptions reuse each variant's existing meshes:
+
+- `stararm102/urdf/stararm102_bimanual_ld_description.urdf`
+- `stararm102/urdf/stararm102_bimanual_hd_description.urdf`
+- `stararm102/urdf/stararm102_bimanual_fl_description.urdf`
+
+Paths are relative to `get_urdf_path()`. The shared `world` root and fixed
+`left_mount` / `right_mount` joints place the bases at y=+0.2 / -0.2 m, matching
+the SO-101 bimanual layout. Each arm retains its original orientation, geometry,
+and limits, including both gripper jaws. This is a preview layout, not a measured
+robot-cell calibration; adjust the mounts to match your installation before
+using the model for spatial planning.
 
 Review the four ports, calibrate both pairs, and clear the work area before running:
 
@@ -119,4 +131,12 @@ hd_urdf = urdf_dir / "stararm102" / "urdf" / "stararm102_hd_description.urdf"
 ```bash
 uv sync
 uv run pytest packages/physicalai-stararm-plugin/tests/
+```
+
+After changing a single-arm URDF, regenerate the bimanual descriptions from the
+repository root. The shared generator uses `defusedxml` from the ReBot extra:
+
+```bash
+uv run --extra plugin-rebot-b601 python .github/scripts/generate_bimanual_urdfs.py
+uv run --extra plugin-rebot-b601 python .github/scripts/generate_bimanual_urdfs.py --check
 ```
