@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Generic, TypeVar
 
 from physicalai_studio_plugin import (
     CatalogRobotFactory,
     PayloadContainer,
     PortScanner,
+    RobotAsset,
     RobotCatalogDefinition,
     RobotZeroCalibration,
     SerialPortInfo,
@@ -21,6 +23,8 @@ from pydantic import BaseModel, Field
 
 from physicalai_rebot_b601_plugin import BimanualReBotB601
 from physicalai_rebot_b601_plugin.studio_catalog import (
+    _REBOT_B601_DM_ASSET,
+    _REBOT_B601_RS_ASSET,
     _REBOT_PROBE,
     _REBOT_RS_PROBE,
     ReBotB601DMPayload,
@@ -30,6 +34,28 @@ from physicalai_rebot_b601_plugin.studio_catalog import (
 )
 
 _PayloadT = TypeVar("_PayloadT", bound=BaseModel)
+
+
+def _bimanual_asset(single_arm: RobotAsset, urdf_path: str) -> RobotAsset:
+    """Prefix single-arm observation keys and URDF joints for the paired preview.
+
+    Returns:
+        A bimanual asset sharing the single-arm mesh packages and root resolver.
+    """
+    return RobotAsset(
+        urdf_relative_path=Path(urdf_path),
+        packages=single_arm.packages,
+        joint_map={
+            f"{side}_{key}": [f"{side}_{joint}" for joint in joints]
+            for side in ("left", "right")
+            for key, joints in single_arm.joint_map.items()
+        },
+        root_resolver=single_arm.root_resolver,
+    )
+
+
+_BIMANUAL_DM_ASSET = _bimanual_asset(_REBOT_B601_DM_ASSET, "rebot-b601-dm/urdf/rebot_b601_bimanual_dm.urdf")
+_BIMANUAL_RS_ASSET = _bimanual_asset(_REBOT_B601_RS_ASSET, "rebot-b601-rs/urdf/rebot_b601_bimanual_rs.urdf")
 
 
 @dataclass
@@ -144,6 +170,7 @@ def get_bimanual_definitions() -> list[RobotCatalogDefinition]:
             role="follower",
             robot_builder=_build_bimanual_dm,
             robot_payload=BimanualReBotB601DMPayload,
+            asset=_BIMANUAL_DM_ASSET,
             probe=BimanualReBotProbe(),
             zero_calibration=_ZERO_CALIBRATION,
         ),
@@ -153,6 +180,7 @@ def get_bimanual_definitions() -> list[RobotCatalogDefinition]:
             role="follower",
             robot_builder=_build_bimanual_rs,
             robot_payload=BimanualReBotB601RSPayload,
+            asset=_BIMANUAL_RS_ASSET,
             probe=BimanualReBotProbe(socketcan=True),
             zero_calibration=_ZERO_CALIBRATION,
         ),
