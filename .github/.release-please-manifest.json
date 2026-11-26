@@ -7,5 +7,5 @@
   "plugins/robots/physicalai-mujoco-plugin": "0.6.0",
   "plugins/robots/physicalai-trossen-plugin": "0.3.0",
   "plugins/robots/physicalai-so101-plugin": "0.3.0",
-  "packages/physicalai-openarm-plugin": "0.0.0"
+  "plugins/robots/physicalai-openarm-plugin": "0.0.0"
 }

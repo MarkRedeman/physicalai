@@ -1,5 +1,5 @@
 # Bimanual OpenArm teleoperation: a KER exoskeleton leader drives two follower arms.
-# uv run physicalai run --config packages/physicalai-openarm-plugin/examples/runtime/bimanual-teleop.yaml
+# uv run physicalai run --config plugins/robots/physicalai-openarm-plugin/examples/runtime/bimanual-teleop.yaml
 runtime:
   robot:
     class_path: physicalai_openarm_plugin.BimanualOpenArmFollower

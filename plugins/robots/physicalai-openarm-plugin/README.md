@@ -89,10 +89,10 @@ ports. Edit them, then run from the repo root:
 
 ```bash
 # One leader arm driving one follower arm
-uv run physicalai run --config packages/physicalai-openarm-plugin/examples/runtime/teleop.yaml
+uv run physicalai run --config plugins/robots/physicalai-openarm-plugin/examples/runtime/teleop.yaml
 
 # Two follower arms driven by a KER exoskeleton
-uv run physicalai run --config packages/physicalai-openarm-plugin/examples/runtime/bimanual-teleop.yaml
+uv run physicalai run --config plugins/robots/physicalai-openarm-plugin/examples/runtime/bimanual-teleop.yaml
 ```
 
 Add `--print_config` to check a config without hardware.
@@ -108,5 +108,5 @@ CERN-OHL-S-2.0.
 
 ```bash
 uv sync
-uv run pytest packages/physicalai-openarm-plugin/tests/
+uv run pytest plugins/robots/physicalai-openarm-plugin/tests/
 ```
