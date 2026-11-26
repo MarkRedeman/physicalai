@@ -12,6 +12,7 @@ physicalai-studio-plugin = { workspace = true }
 physicalai-mujoco-plugin = { workspace = true }
 physicalai-rebot-b601-plugin = { workspace = true }
 physicalai-stararm-plugin = { workspace = true }
+physicalai-openarm-plugin = { workspace = true }
 physicalai-trossen-plugin = { workspace = true }
 physicalai-so101-plugin = { workspace = true }
 
@@ -91,6 +92,7 @@ robots = [
 plugin-mujoco = ["physicalai-mujoco-plugin; python_version >= '3.12'"]
 plugin-rebot-b601 = ["physicalai-rebot-b601-plugin; python_version >= '3.12'"]
 plugin-stararm = ["physicalai-stararm-plugin; python_version >= '3.12'"]
+plugin-openarm = ["physicalai-openarm-plugin; python_version >= '3.12'"]
 plugin-so101 = ["physicalai-so101-plugin; python_version >= '3.12' and python_version < '3.14'"]
 so101 = ["physicalai-so101-plugin; python_version >= '3.12' and python_version < '3.14'"]
 plugin-trossen = ["physicalai-trossen-plugin; python_version >= '3.12' and python_version < '3.14' and (sys_platform == 'darwin' or sys_platform == 'linux')"]
